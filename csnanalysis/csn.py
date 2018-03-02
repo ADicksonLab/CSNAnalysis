@@ -1,7 +1,7 @@
 import scipy
 import networkx as nx
 import numpy as np
-from csnanalysis.matrix import eig_weights, mult_weights
+from csnanalysis.matrix import eig_weights, mult_weights, committor
 
 def count_to_trans(countmat):
     """
@@ -63,6 +63,7 @@ class CSN(object):
         """
         Writes node and edge files for import into the Gephi network visualization program.
         """
+        
 
     def add_attr(self, name, values):
         """
@@ -169,4 +170,47 @@ class CSN(object):
             self.add_attr(label, full_wts)
 
         return full_wts
+
+    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20):
+        """
+        Calculates committor probabilities between an arbitrary set of N basins.
+
+        basins     -- A list of lists, describing which states make up the
+                      basins of attraction.  There can be any number of basins.
+                      e.g. [[basin1_a,basin1_b,...],[basin2_a,basin2_b,...]]
+        labels     -- A list of labels given to the committors (one for each
+                      basin) in the attribute list.
+        add_basins -- Whether to add basin vectors to attribute list.
+        basin_labels -- List of names of the basins.
+        tol        -- Tolerance of iterative multiplication process
+                      (see matrix.trans_mult_iter)
+        maxstep    -- Maximum number of iteractions of multiplication process.
+
+        The committors are also returned from the function as a numpy array.
+        """
+
+        if self.trim_transmat is None:
+            # use full transition matrix
+            full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
+        else:
+            # use trimmed transition matrix
+            comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
+            full_comm = np.zeros(self.nnodes,dtype=float64)
+            for i,ind in enumerate(self.trim_indices):
+                full_comm[ind] = comm[i]
+
+        if labels is None:
+            labels = ['p' + str(i) for i in range(len(basins))]
+        for i,b in enumerate(basins):
+            self.add_attr(labels[i], full_comm[:,i])
+            
+        if add_basins:
+            if basin_labels is None:
+                basin_labels = [str(i) for i in range(len(basins))]
+            for i,b in enumerate(basins):
+                bvec = np.zeros(self.nnodes,dtype=int)
+                bvec[b] = 1
+                self.add_attr(basin_labels[i],bvec)
+            
+        return full_comm
 
