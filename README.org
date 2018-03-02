@@ -1,0 +1,28 @@
+* CSNAnalysis: Tools for creating, analyzing and visualizing Conformation Space Networks.
+
+CSNAnalysis is a set of tools for network-based analysis of molecular dynamics trajectories.
+To use, initialize a `CSN` object using a matrix of transition counts.
+The "killer app" of CSNAnalysis is an easy interface between enhanced sampling algorithms 
+(e.g. WExplore), molecular clustering programs (e.g. MSMBuilder), graph analysis packages (e.g. networkX) 
+and graph visualization programs (e.g. Gephi).
+
+CSNAnalysis is currently in beta.
+
+* Dependencies
+- numpy
+- scipy
+- networkx
+
+* Features
+CSNAnalysis will have the following capabilities:
+- constructing transition probability matrices
+- trimming CSNs using a variety of criteria
+- computing committor probabilities with an arbitrary number of basins
+- computing hub-scores (mediation probabilities) with an arbitrary number of basins
+
+* Misc
+** Versioning
+
+See [[http://semver.org/]] for version number meanings.
+
+Version 1.0.0 will be released whenever the abstract layer API is stable. Subsequent 1.X.y releases will be made as applied and porcelain layer features are added.
