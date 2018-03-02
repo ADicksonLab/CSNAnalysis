@@ -1,6 +1,7 @@
 import scipy
 import networkx as nx
 import numpy as np
+from csnanalysis.matrix import eig_weights, mult_weights
 
 def count_to_trans(countmat):
     """
@@ -8,10 +9,10 @@ def count_to_trans(countmat):
     matrix.
     """
     tmp = np.array(countmat.toarray(),dtype=float)
-    colsums = tmp.sum(axis=1)
+    colsums = tmp.sum(axis=0)
     for i,c in enumerate(colsums):
         if c > 0:
-            tmp[i] /= c
+            tmp[:,i] /= c
         
     return(scipy.sparse.coo_matrix(tmp))
         
@@ -26,7 +27,7 @@ class CSN(object):
     def __init__(self, counts, symmetrize=False):
         """
         Initializes a CSN object using a counts matrix.  This can either be a numpy array,
-        a scipy sparse matrix, or a list of lists.
+        a scipy sparse matrix, or a list of lists. Indices: [to][from], (or, [row][column]).
         """
         if type(counts) is list:
             self.countmat = scipy.sparse.coo_matrix(counts)
@@ -49,12 +50,14 @@ class CSN(object):
 
         self.nnodes = self.countmat.shape[0]        
         self.transmat = count_to_trans(self.countmat)
+
+        self.trim_transmat = None
             
         # initialize networkX directed graph
         self.graph = nx.DiGraph()
         labels = [{'ID' : i} for i in range(self.nnodes)]
         self.graph.add_nodes_from(zip(range(self.nnodes),labels))
-        self.graph.add_weighted_edges_from(zip(self.transmat.row,self.transmat.col,self.transmat.data))
+        self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,self.transmat.data))
 
     def to_gephi(self, cols='all', node_name='node.csv', edge_name='edge.csv'):
         """
@@ -118,3 +121,52 @@ class CSN(object):
         self.trim_nnodes = self.trim_countmat.shape[0]        
         self.trim_transmat = count_to_trans(self.trim_countmat)
                 
+
+    def calc_eig_weights(self,label='eig_weights'):
+        """
+        Calculates weights of states using the highest Eigenvalue of the 
+        transition matrix.  By default it uses self.trim_transmat, but will
+        use self.transmat if no trimming has been done.
+
+        The weights are stored as node attributes in self.graph with the label
+        'label', and are also returned from the function.
+        """
+
+        if self.trim_transmat is None:
+            # use full transition matrix
+            full_wts = eig_weights(self.transmat)
+            self.add_attr(label, full_wts)
+        else:
+            # use trimmed transition matrix
+            wts = eig_weights(self.trim_transmat)
+            full_wts = np.zeros(self.nnodes,dtype=float64)
+            for i,ind in enumerate(self.trim_indices):
+                full_wts[ind] = wts[i]
+            self.add_attr(label, full_wts)
+
+        return full_wts
+
+    def calc_mult_weights(self,label='mult_weights',tol=1e-6):
+        """
+        Calculates weights of states using iterative multiplication of the 
+        transition matrix.  By default it uses self.trim_transmat, but will
+        use self.transmat if no trimming has been done.
+
+        The weights are stored as node attributes in self.graph with the label
+        'label', and are also returned from the function.
+        """
+
+        if self.trim_transmat is None:
+            # use full transition matrix
+            full_wts = mult_weights(self.transmat,tol)
+            self.add_attr(label, full_wts)
+        else:
+            # use trimmed transition matrix
+            wts = mult_weights(self.trim_transmat,tol)
+            full_wts = np.zeros(self.nnodes,dtype=float64)
+            for i,ind in enumerate(self.trim_indices):
+                full_wts[ind] = wts[i]
+            self.add_attr(label, full_wts)
+
+        return full_wts
+
