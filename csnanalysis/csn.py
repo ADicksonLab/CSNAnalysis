@@ -74,7 +74,7 @@ class CSN(object):
             
         nx.set_node_attributes(self.graph,name,attr)
         
-    def trim_graph(self, by_inflow=True, by_outflow=True, min_count=0):
+    def trim(self, by_inflow=True, by_outflow=True, min_count=0):
         """
         Trims a graph to delete nodes that are not connected to the main
         component, which is the component containing the most-sampled node (MSN)
@@ -108,7 +108,7 @@ class CSN(object):
             mask[[i for i in range(self.nnodes) if i not in upstream]] = False
 
         if min_count > 0:
-            mask[[i for i in range(self.nnodes) if totcounts[i] >= min_count]] = False
+            mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
 
         self.trim_indices = [i for i in range(self.nnodes) if mask[i] is True]
         self.trim_graph = self.graph.subgraph(self.trim_indices)
