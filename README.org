@@ -8,6 +8,17 @@ and graph visualization programs (e.g. Gephi).
 
 CSNAnalysis is currently in beta.
 
+* Installation
+To install CSNAnalysis, clone one of the releases and manually install it.
+
+#+BEGIN_SRC bash
+  git clone https://gitlab.com/ADicksonLab/CSNAnalysis
+  cd CSNAnalysis
+
+  # install
+  pip install --user -e .
+#+END_SRC
+
 * Dependencies
 - numpy
 - scipy
@@ -15,10 +26,13 @@ CSNAnalysis is currently in beta.
 
 * Features
 CSNAnalysis will have the following capabilities:
+
 - constructing transition probability matrices
 - trimming CSNs using a variety of criteria
 - computing committor probabilities with an arbitrary number of basins
 - computing hub-scores (mediation probabilities) with an arbitrary number of basins
+- export CSV files for node and edge files in Gephi format
+- compute undirected edge weights appropriate for graph visualization in Gephi
 
 * Misc
 ** Versioning
