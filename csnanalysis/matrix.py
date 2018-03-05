@@ -2,6 +2,25 @@
 import scipy
 import numpy as np
 
+def count_to_trans(countmat):
+    """
+    Converts a count matrix (in scipy sparse format) to a transition
+    matrix.
+    """
+    tmp = np.array(countmat.toarray(),dtype=float)
+    colsums = tmp.sum(axis=0)
+    for i,c in enumerate(colsums):
+        if c > 0:
+            tmp[:,i] /= c
+        
+    return(scipy.sparse.coo_matrix(tmp))
+        
+def symmetrize(countmat):
+    """
+    Symmetrizes a count matrix (in scipy sparse format).
+    """
+    return 0.5*(countmat + countmat.transpose())
+
 def make_sink(transmat,sink_states):
     """
     Constructs a transition matrix with "sink states", where the columns are

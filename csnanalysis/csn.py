@@ -1,26 +1,7 @@
 import scipy
 import networkx as nx
 import numpy as np
-from csnanalysis.matrix import eig_weights, mult_weights, committor
-
-def count_to_trans(countmat):
-    """
-    Converts a count matrix (in scipy sparse format) to a transition
-    matrix.
-    """
-    tmp = np.array(countmat.toarray(),dtype=float)
-    colsums = tmp.sum(axis=0)
-    for i,c in enumerate(colsums):
-        if c > 0:
-            tmp[:,i] /= c
-        
-    return(scipy.sparse.coo_matrix(tmp))
-        
-def symmetrize(countmat):
-    """
-    Symmetrizes a count matrix (in scipy sparse format).
-    """
-    return 0.5*(countmat + countmat.transpose())
+from csnanalysis.matrix import *
     
 class CSN(object):
     
@@ -55,15 +36,51 @@ class CSN(object):
             
         # initialize networkX directed graph
         self.graph = nx.DiGraph()
-        labels = [{'ID' : i} for i in range(self.nnodes)]
+        labels = [{'label' : i, 'ID' : i} for i in range(self.nnodes)]
         self.graph.add_nodes_from(zip(range(self.nnodes),labels))
         self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,self.transmat.data))
 
-    def to_gephi(self, cols='all', node_name='node.csv', edge_name='edge.csv'):
+    def to_gephi(self, cols='all', node_name='node.csv', edge_name='edge.csv', directed=False):
         """
         Writes node and edge files for import into the Gephi network visualization program.
+
+        cols  --  A list of columns that should be written to the node file.  ID and label are 
+                  included by default.  'all' will include every attribute attached to the 
+                  nodes in self.graph.
+
         """
+        if cols == 'all':
+            cols = list(self.graph.node[0].keys())
+        else:
+            if 'label' not in cols:
+                cols = ['label'] + cols
+            if 'ID' not in cols:
+                cols = ['ID'] + cols
         
+        with open(node_name,mode='w') as f:
+            f.write(" ".join(cols)+"\n")
+            for i in range(self.nnodes):
+                data = [str(self.graph.node[i][c]) for c in cols]
+                f.write(' '.join(data)+"\n")
+
+        # compute edge weights
+        if directed:
+            with open(edge_name,mode='w') as f:
+                f.write("source target type prob i_weight\n")
+                for from_ind,edge_dict in self.graph.edge.items():
+                    for to_ind,edge in edge_dict.items():
+                        f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Directed',edge['weight'],int(edge['weight']*100)))
+        else:
+            with open(edge_name,mode='w') as f:
+                f.write("source target type prob i_weight\n")
+                for from_ind,edge_dict in self.graph.edge.items():
+                    for to_ind,edge in edge_dict.items():
+                        if from_ind <= to_ind:
+                            if to_ind in self.graph.edge and from_ind in self.graph.edge[to_ind]:
+                                edge_weight = 0.5*(self.graph.edge[to_ind][from_ind]['weight'] + edge['weight'])
+                            else:
+                                edge_weight = 0.5*edge['weight']
+                            f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Undirected',edge_weight,int(edge_weight*100)))
 
     def add_attr(self, name, values):
         """
@@ -111,7 +128,7 @@ class CSN(object):
         if min_count > 0:
             mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
 
-        self.trim_indices = [i for i in range(self.nnodes) if mask[i] is True]
+        self.trim_indices = [i for i in range(self.nnodes) if mask[i] == True]
         self.trim_graph = self.graph.subgraph(self.trim_indices)
 
         tmp_arr = self.countmat.toarray()[mask,...][...,mask]
@@ -140,7 +157,7 @@ class CSN(object):
         else:
             # use trimmed transition matrix
             wts = eig_weights(self.trim_transmat)
-            full_wts = np.zeros(self.nnodes,dtype=float64)
+            full_wts = np.zeros(self.nnodes,dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_wts[ind] = wts[i]
             self.add_attr(label, full_wts)
