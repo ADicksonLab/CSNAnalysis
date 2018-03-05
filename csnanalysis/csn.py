@@ -181,7 +181,7 @@ class CSN(object):
         else:
             # use trimmed transition matrix
             wts = mult_weights(self.trim_transmat,tol)
-            full_wts = np.zeros(self.nnodes,dtype=float64)
+            full_wts = np.zeros(self.nnodes,dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_wts[ind] = wts[i]
             self.add_attr(label, full_wts)
