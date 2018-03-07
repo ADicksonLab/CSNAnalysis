@@ -91,7 +91,7 @@ class CSN(object):
         for i, v in enumerate(values):
             attr[i] = v
             
-        nx.set_node_attributes(self.graph,attr,name)
+        nx.set_node_attributes(self.graph,values=attr,name=name)
         
     def trim(self, by_inflow=True, by_outflow=True, min_count=0):
         """
