@@ -19,7 +19,7 @@ def symmetrize_matrix(countmat):
     """
     Symmetrizes a count matrix (in scipy sparse format).
     """
-    return 0.5*(countmat + countmat.transpose())
+    return scipy.sparse.coo_matrix(0.5*(countmat + countmat.transpose()))
 
 def make_sink(transmat,sink_states):
     """
