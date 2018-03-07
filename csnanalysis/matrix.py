@@ -15,7 +15,7 @@ def count_to_trans(countmat):
         
     return(scipy.sparse.coo_matrix(tmp))
         
-def symmetrize(countmat):
+def symmetrize_matrix(countmat):
     """
     Symmetrizes a count matrix (in scipy sparse format).
     """

@@ -27,7 +27,7 @@ class CSN(object):
 
         self.symmetrize = symmetrize
         if self.symmetrize:
-            self.countmat = symmetrize(self.countmat)
+            self.countmat = symmetrize_matrix(self.countmat)
 
         self.nnodes = self.countmat.shape[0]        
         self.transmat = count_to_trans(self.countmat)
@@ -90,7 +90,7 @@ class CSN(object):
         for i, v in enumerate(values):
             attr[i] = v
             
-        nx.set_node_attributes(self.graph,name,attr)
+        nx.set_node_attributes(self.graph,attr,name)
         
     def trim(self, by_inflow=True, by_outflow=True, min_count=0):
         """
@@ -115,26 +115,48 @@ class CSN(object):
         totcounts = self.countmat.sum(axis=1)
         msn = totcounts.argmax()
 
-        to_cut = []
         mask = np.ones(self.nnodes,dtype=bool)
-        if by_outflow:
-            downstream = list(nx.dfs_predecessors(self.graph,msn).keys())
-            mask[[i for i in range(self.nnodes) if i not in downstream]] = False
-
-        if by_inflow:
-            upstream = list(nx.dfs_successors(self.graph,msn).keys())
-            mask[[i for i in range(self.nnodes) if i not in upstream]] = False
+        oldmask = np.zeros(self.nnodes,dtype=bool)
 
         if min_count > 0:
             mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
 
-        self.trim_indices = [i for i in range(self.nnodes) if mask[i] == True]
-        self.trim_graph = self.graph.subgraph(self.trim_indices)
+        while (mask != oldmask).any():
+
+            oldmask = mask.copy()
+            self.trim_indices = [i for i in range(self.nnodes) if mask[i] == True]
+            self.trim_graph = self.graph.subgraph(self.trim_indices)
+
+            if by_outflow:
+                downstream = list(nx.dfs_predecessors(self.trim_graph,self.trim_indices.index(msn)).keys())
+                mask[[i for i in range(self.nnodes) if i not in downstream]] = False
+
+            if by_inflow:
+                upstream = list(nx.dfs_successors(self.trim_graph,self.trim_indices.index(msn)).keys())
+                mask[[i for i in range(self.nnodes) if i not in upstream]] = False
+
+        # count all transitions to masked states and add these as self-transitions
+        to_add = {}
+        rows = self.countmat.row
+        cols = self.countmat.col
+        data = self.countmat.data
+        
+        for i in range(len(data)):
+            if mask[rows[i]] is False and mask[cols[i]] is True:
+                if cols[i] in to_add:
+                    to_add[cols[i]] += data[i]
+                else:
+                    to_add[cols[i]] = data[i]
 
         tmp_arr = self.countmat.toarray()[mask,...][...,mask]
+
+        for ind,full_ind in enumerate(self.trim_indices):
+            if full_ind in to_add:
+                tmp_arr[ind][ind] += to_add[full_ind]
+            
         self.trim_countmat = scipy.sparse.coo_matrix(tmp_arr)
         if self.symmetrize:
-            self.trim_countmat = symmetrize(self.trim_countmat)
+            self.trim_countmat = symmetrize_matrix(self.trim_countmat)
 
         self.trim_nnodes = self.trim_countmat.shape[0]        
         self.trim_transmat = count_to_trans(self.trim_countmat)
