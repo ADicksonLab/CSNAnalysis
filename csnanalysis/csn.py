@@ -2,7 +2,8 @@ import scipy
 import networkx as nx
 import numpy as np
 from csnanalysis.matrix import *
-    
+import itertools
+
 class CSN(object):
     
     def __init__(self, counts, symmetrize=False):
@@ -128,11 +129,12 @@ class CSN(object):
             self.trim_graph = self.graph.subgraph(self.trim_indices)
 
             if by_outflow:
-                downstream = list(nx.dfs_predecessors(self.trim_graph,self.trim_indices.index(msn)).keys())
-                mask[[i for i in range(self.nnodes) if i not in downstream]] = False
+                downstream = nx.dfs_successors(self.trim_graph,msn).values()
+                dlist = list(itertools.chain(*downstream)) + [msn]
+                mask[[i for i in range(self.nnodes) if i not in dlist]] = False
 
             if by_inflow:
-                upstream = list(nx.dfs_successors(self.trim_graph,self.trim_indices.index(msn)).keys())
+                upstream = list(nx.dfs_predecessors(self.trim_graph,msn).keys()) + [msn]
                 mask[[i for i in range(self.nnodes) if i not in upstream]] = False
 
         # count all transitions to masked states and add these as self-transitions
