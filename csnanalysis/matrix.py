@@ -137,6 +137,7 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
     """
 
     # make sink_matrix
+
     flat_sink = [i for b in basins for i in b]
     sink_mat = make_sink(transmat,flat_sink)
 

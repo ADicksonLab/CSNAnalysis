@@ -10,7 +10,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'Numpy',
-        'NetworkX',
-        'Scipy',
+        'NetworkX>=2.1',
+        'Scipy>=0.19',
     ],
 )

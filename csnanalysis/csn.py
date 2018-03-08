@@ -276,13 +276,14 @@ class CSN(object):
         else:
             # use trimmed transition matrix
             comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
-            full_comm = np.zeros(self.nnodes,dtype=float64)
+            full_comm = np.zeros((self.transmat.shape[0],len(basins)),dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_comm[ind] = comm[i]
 
         if labels is None:
             labels = ['p' + str(i) for i in range(len(basins))]
-        for i,b in enumerate(basins):
+
+        for i in range(len(basins)):
             fc_float = [float(i) for i in full_comm[:,i]]
             self.add_attr(labels[i], fc_float)
             
