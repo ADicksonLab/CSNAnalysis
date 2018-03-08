@@ -126,6 +126,8 @@ class CSN(object):
         for node in range(self.nnodes):
             maxc = comm[node,:].max()
             for i in range(min(3,nbasin)):
+                if node not in rgb:
+                    rgb[node] = {}
                 rgb[node][colors[i]] = highc*comm[node,i]/maxc
 
         return rgb
