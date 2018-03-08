@@ -3,6 +3,7 @@ import networkx as nx
 import numpy as np
 from csnanalysis.matrix import *
 import itertools
+from copy import deepcopy
 
 class CSN(object):
     
@@ -41,7 +42,7 @@ class CSN(object):
         self.graph = nx.DiGraph()
         labels = [{'label' : i, 'count' : int(totcounts[i][0])} for i in range(self.nnodes)]
         self.graph.add_nodes_from(zip(range(self.nnodes),labels))
-        self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,self.transmat.data))
+        self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,100*self.transmat.data))
 
         # remove self edges from graph
         self_edges = [(i,i) for i in range(self.nnodes)]
@@ -128,7 +129,10 @@ class CSN(object):
             for i in range(min(3,nbasin)):
                 if node not in rgb:
                     rgb[node] = {}
-                rgb[node][colors[i]] = highc*comm[node,i]/maxc
+                if maxc == 0:
+                    rgb[node][colors[i]] = 0
+                else:
+                    rgb[node][colors[i]] = int(highc*comm[node,i]/maxc)
 
         return rgb
         
@@ -277,7 +281,15 @@ class CSN(object):
             full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
         else:
             # use trimmed transition matrix
-            comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
+            trim_basins = []
+            for i,b in enumerate(basins):
+                trim_basins.append([])
+                for j,state in enumerate(b):
+                    try:
+                        trim_basins[i].append(self.trim_indices.index(state))
+                    except:
+                        pass
+            comm = committor(self.trim_transmat,trim_basins,tol=tol,maxstep=maxstep)
             full_comm = np.zeros((self.transmat.shape[0],len(basins)),dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_comm[ind] = comm[i]
