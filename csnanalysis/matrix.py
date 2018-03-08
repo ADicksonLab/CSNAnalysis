@@ -137,7 +137,8 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
     """
 
     # make sink_matrix
-    sink_mat = make_sink(transmat,list(np.array(basins).flatten()))
+    flat_sink = [i for b in basins for i in b]
+    sink_mat = make_sink(transmat,flat_sink)
 
     sink_results = trans_mult_iter(sink_mat,tol,maxstep)
 

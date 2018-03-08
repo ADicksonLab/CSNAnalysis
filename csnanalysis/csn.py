@@ -39,11 +39,15 @@ class CSN(object):
             
         # initialize networkX directed graph
         self.graph = nx.DiGraph()
-        labels = [{'label' : i, 'ID' : i, 'count' : int(totcounts[i][0])} for i in range(self.nnodes)]
+        labels = [{'label' : i, 'count' : int(totcounts[i][0])} for i in range(self.nnodes)]
         self.graph.add_nodes_from(zip(range(self.nnodes),labels))
         self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,self.transmat.data))
 
-    def to_gephi(self, cols='all', node_name='node.csv', edge_name='edge.csv', directed=False):
+        # remove self edges from graph
+        self_edges = [(i,i) for i in range(self.nnodes)]
+        self.graph.remove_edges_from(self_edges)
+
+    def to_gephi_csv(self, cols='all', node_name='node.csv', edge_name='edge.csv', directed=False):
         """
         Writes node and edge files for import into the Gephi network visualization program.
 
@@ -94,7 +98,39 @@ class CSN(object):
             attr[i] = v
             
         nx.set_node_attributes(self.graph,values=attr,name=name)
+
+    def set_colors(self, rgb):
+        """
+        Adds colors to each node for gexf export of the graph.
+
+        rgb: A dict that stores the rgb values of each node.
+
+        Example: rgb['0']['r'] = 255
+                 rgb['0']['g'] = 0
+                 rgb['0']['b'] = 0
+        """
+        for node in rgb:
+            self.graph.node[node]['viz'] = {'color': {'r': rgb[node]['r'], 'g': rgb[node]['g'], 'b': rgb[node]['b'], 'a': 0}}
+
+    def colors_from_committors(self,comm):
+        """
+        Returns rgb dict using values of committor probabilities.
+        Very useful for 3-basin committors!
+
+        comm:  Numpy array of committors, as returns from self.calc_committors
+        """
+        highc = 255
+        nbasin = comm.shape[1]
+        rgb = {}
+        colors = ['r','g','b']
+        for node in range(self.nnodes):
+            maxc = comm[node,:].max()
+            for i in range(min(3,nbasin)):
+                rgb[node][colors[i]] = highc*comm[node,i]/maxc
+
+        return rgb
         
+            
     def trim(self, by_inflow=True, by_outflow=True, min_count=0):
         """
         Trims a graph to delete nodes that are not connected to the main
@@ -179,14 +215,15 @@ class CSN(object):
         if self.trim_transmat is None:
             # use full transition matrix
             full_wts = eig_weights(self.transmat)
-            self.add_attr(label, full_wts)
         else:
             # use trimmed transition matrix
             wts = eig_weights(self.trim_transmat)
             full_wts = np.zeros(self.nnodes,dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_wts[ind] = wts[i]
-            self.add_attr(label, full_wts)
+
+        fw_float = [float(i) for i in full_wts]
+        self.add_attr(label, fw_float)
 
         return full_wts
 
@@ -203,15 +240,16 @@ class CSN(object):
         if self.trim_transmat is None:
             # use full transition matrix
             full_wts = mult_weights(self.transmat,tol)
-            self.add_attr(label, full_wts)
         else:
             # use trimmed transition matrix
             wts = mult_weights(self.trim_transmat,tol)
             full_wts = np.zeros(self.nnodes,dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_wts[ind] = wts[i]
-            self.add_attr(label, full_wts)
 
+        fw_float = [float(i) for i in full_wts]
+        self.add_attr(label, fw_float)
+            
         return full_wts
 
     def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20):
@@ -245,7 +283,8 @@ class CSN(object):
         if labels is None:
             labels = ['p' + str(i) for i in range(len(basins))]
         for i,b in enumerate(basins):
-            self.add_attr(labels[i], full_comm[:,i])
+            fc_float = [float(i) for i in full_comm[:,i]]
+            self.add_attr(labels[i], fc_float)
             
         if add_basins:
             if basin_labels is None:
@@ -253,7 +292,8 @@ class CSN(object):
             for i,b in enumerate(basins):
                 bvec = np.zeros(self.nnodes,dtype=int)
                 bvec[b] = 1
-                self.add_attr(basin_labels[i],bvec)
+                bv_int = [int(i) for i in bvec]
+                self.add_attr(basin_labels[i],bv_int)
             
         return full_comm
 
