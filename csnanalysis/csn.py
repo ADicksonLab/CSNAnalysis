@@ -26,6 +26,8 @@ class CSN(object):
         if self.countmat.shape[0] != self.countmat.shape[1]:
             raise ValueError("Count matrix is not square: ",self.countmat.shape)
 
+        totcounts = self.countmat.sum(axis=1).tolist()
+        
         self.symmetrize = symmetrize
         if self.symmetrize:
             self.countmat = symmetrize_matrix(self.countmat)
@@ -37,7 +39,7 @@ class CSN(object):
             
         # initialize networkX directed graph
         self.graph = nx.DiGraph()
-        labels = [{'label' : i, 'ID' : i} for i in range(self.nnodes)]
+        labels = [{'label' : i, 'ID' : i, 'count' : int(totcounts[i][0])} for i in range(self.nnodes)]
         self.graph.add_nodes_from(zip(range(self.nnodes),labels))
         self.graph.add_weighted_edges_from(zip(self.transmat.col,self.transmat.row,self.transmat.data))
 
@@ -68,20 +70,20 @@ class CSN(object):
         if directed:
             with open(edge_name,mode='w') as f:
                 f.write("source target type prob i_weight\n")
-                for from_ind,edge_dict in self.graph.edge.items():
-                    for to_ind,edge in edge_dict.items():
-                        f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Directed',edge['weight'],int(edge['weight']*100)))
+                for (from_ind, to_ind, weight_dict) in self.graph.edges.data():
+                    wt = weight_dict['weight']
+                    f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Directed',wt,int(wt*100)))
         else:
             with open(edge_name,mode='w') as f:
                 f.write("source target type prob i_weight\n")
-                for from_ind,edge_dict in self.graph.edge.items():
-                    for to_ind,edge in edge_dict.items():
-                        if from_ind <= to_ind:
-                            if to_ind in self.graph.edge and from_ind in self.graph.edge[to_ind]:
-                                edge_weight = 0.5*(self.graph.edge[to_ind][from_ind]['weight'] + edge['weight'])
-                            else:
-                                edge_weight = 0.5*edge['weight']
-                            f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Undirected',edge_weight,int(edge_weight*100)))
+                for (from_ind, to_ind, weight_dict) in self.graph.edges.data():
+                    if from_ind <= to_ind:
+                        if self.graph.has_edge(to_ind,from_ind):
+                            back_wt = self.graph.edges[to_ind,from_ind]['weight']
+                        else:
+                            back_wt = 0
+                        edge_weight = 0.5*(back_wt + weight_dict['weight'])
+                        f.write("{0:d} {1:d} {2:s} {3:f} {4:d}\n".format(from_ind,to_ind,'Undirected',edge_weight,int(edge_weight*100)))
 
     def add_attr(self, name, values):
         """
