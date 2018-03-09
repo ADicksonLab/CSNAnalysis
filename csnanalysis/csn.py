@@ -113,6 +113,19 @@ class CSN(object):
         for node in rgb:
             self.graph.node[node]['viz'] = {'color': {'r': rgb[node]['r'], 'g': rgb[node]['g'], 'b': rgb[node]['b'], 'a': 0}}
 
+    def set_positions(self, xy):
+        """
+        Adds x,y positions to each node for gexf export of the graph.
+
+        xy: A dict that stores the xy positions of each node.  
+
+        Example: xy['0']['x'] = 0.5
+                 xy['0']['y'] = 1.6
+        """
+        for node in xy:
+            self.graph.node[node]['viz'] = {'position': {'x': float(xy[node]['x']), 'y': float(xy[node]['y'])}}
+
+
     def colors_from_committors(self,comm):
         """
         Returns rgb dict using values of committor probabilities.
