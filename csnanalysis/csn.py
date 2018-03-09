@@ -127,7 +127,7 @@ class CSN(object):
         for node in xy:
             if 'viz' not in self.graph.node[node]:
                 self.graph.node[node]['viz'] = {}
-            self.graph.node[node]['viz']['position'] = {'x': float(xy[node]['x']), 'y': float(xy[node]['y'])}
+            self.graph.node[node]['viz']['position'] = {'x': float(xy[node]['x']), 'y': float(xy[node]['y']), 'z': float(0)}
 
 
     def colors_from_committors(self,comm):
