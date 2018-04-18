@@ -12,7 +12,7 @@ CSNAnalysis is currently in beta.
 To install CSNAnalysis, clone one of the releases and manually install it.
 
 #+BEGIN_SRC bash
-  git clone https://gitlab.com/ADicksonLab/CSNAnalysis
+  git clone https://github.com/ADicksonLab/CSNAnalysis
   cd CSNAnalysis
 
   # install
