@@ -160,3 +160,103 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
 
     return committor
 
+def extend(transmat,hubstates):
+    """
+    This function returns an extended transition matrix (2N x 2N)
+    where one set of states (0..N-1) have NOT yet visited hubstates,
+    and states (N..2N-1) HAVE visited the hubstates.
+    """
+    n = transmat.shape[0]
+
+    # data, rows and cols of the future extended matrix
+    data = []
+    rows = []
+    cols = []
+
+    for i in range(len(transmat.data)):
+        if transmat.row[i] in hubstates:
+            # transition TO a hubstate, add to lower left and lower right
+            # lower left
+            data.append(transmat.data[i])
+            rows.append(transmat.row[i] + n)
+            cols.append(transmat.col[i])
+            # lower right
+            data.append(transmat.data[i])
+            rows.append(transmat.row[i] + n)
+            cols.append(transmat.col[i] + n)
+        else:
+            # transition not to a hubstate, add to upper left and lower right
+            # upper left
+            data.append(transmat.data[i])
+            rows.append(transmat.row[i])
+            cols.append(transmat.col[i])
+            # lower right
+            data.append(transmat.data[i])
+            rows.append(transmat.row[i] + n)
+            cols.append(transmat.col[i] + n)
+
+    ext_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(2*n,2*n))
+    return ext_mat
+
+def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=20,wts=None):
+    """
+    This function computes hub scores, which are the probabilities that
+    transitions between a set of communities will use a given community as
+    an intermediate.  e.g. h_a,b,c is the probability that transitions from
+    basin a to basin b will use c as an intermediate.
+
+    For more information see:
+    Dickson, A and Brooks III, CL. JCTC, 8, 3044-3052 (2012).
+
+    Input:
+    
+    transmat -- An N x N transition matrix in scipy sparse coo format.  
+                Columns should sum to 1. Indices: [to][from]
+
+    hubstates -- A list describing the states in transmat that make up
+              the hub being measured.
+
+    basins -- A list of two lists, describing which two states make up the
+              basins of attraction.  
+              e.g. [[basin_a_1,basin_a_2,...],[basin_b_1,basin_b_2,...]].
+
+    wts    -- The equilibrium weights of all states in transmat.  If this is not
+              given then the function will compute them from eig_weights.
+
+    Output:   [h_a,b,c , h_b,a,c]
+    """
+
+    # make extended sink_matrix
+    n = transmat.shape[0]
+    ext_transmat = extend(transmat,hubstates)
+
+    flat_sink = [i for b in basins for i in b]
+    flat_sink_ext = flat_sink + [i + n for i in flat_sink]
+
+    sink_mat = make_sink(ext_transmat,flat_sink_ext)
+
+    sink_results = trans_mult_iter(sink_mat,tol,maxstep)
+
+    if wts is None:
+        wts = eig_weights(transmat)
+
+    h = np.zeros((2,2),dtype=float)
+    ring = [getring(transmat,b,eig_weights) for b in basins]
+
+    for source,sink in [[0,1],[1,0]]:
+        for i,p in enumerate(ring[source]):
+            if p > 0:
+                # i is a ring state of source basin, with probability p
+                if i in hubstates:
+                    testi = i + n
+                else:
+                    testi = i
+                c_no = 0
+                c_yes = 0
+                for b in basins[sink]:
+                    c_no += sink_results[b][testi]
+                    c_yes += sink_results[b+n][testi]
+                if (c_no + c_yes) > 0:
+                    h[source][sink] += p*c_yes/(c_no+c_yes)
+
+    return [h[0,1],h[1,0]]
