@@ -21,7 +21,7 @@ def symmetrize_matrix(countmat):
     """
     return scipy.sparse.coo_matrix(0.5*(countmat + countmat.transpose()))
 
-def make_sink(transmat,sink_states):
+def _make_sink(transmat,sink_states):
     """
     Constructs a transition matrix with "sink states", where the columns are
     replaced with identity vectors (diagonal element = 1, off-diagonals = 0).
@@ -95,7 +95,7 @@ def mult_weights(transmat,tol=1e-6):
     banded_mat = trans_mult_iter(transmat,tol)
     return banded_mat[:,0]
 
-def trans_mult_iter(transmat,tol,maxstep=20):
+def _trans_mult_iter(transmat,tol,maxstep=20):
     """
     Performs iterative multiplication of transmat until the maximum variation in 
     the rows is less than tol.
@@ -139,9 +139,9 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
     # make sink_matrix
 
     flat_sink = [i for b in basins for i in b]
-    sink_mat = make_sink(transmat,flat_sink)
+    sink_mat = _make_sink(transmat,flat_sink)
 
-    sink_results = trans_mult_iter(sink_mat,tol,maxstep)
+    sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
 
     committor = np.zeros((transmat.shape[0],len(basins)),dtype=float)
     
@@ -160,7 +160,7 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
 
     return committor
 
-def extend(transmat,hubstates):
+def _extend(transmat,hubstates):
     """
     This function returns an extended transition matrix (2N x 2N)
     where one set of states (0..N-1) have NOT yet visited hubstates,
@@ -198,6 +198,27 @@ def extend(transmat,hubstates):
     ext_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(2*n,2*n))
     return ext_mat
 
+def _getring(transmat,basin,eig_weights,tol,maxstep):
+    """
+    Given a transition matrix, and a set of states that form a basin,
+    this returns a vector describing how probability exits that basin.
+    """
+    # make a matrix with sink states in every non-basin state
+    n = transmat.shape[0]
+    flat_sink = [i for i in range(n) if i not in basin]
+    sink_mat = _make_sink(transmat,flat_sink)
+
+    # see where the probability goes
+    sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
+
+    ringprob = np.zeros((n))
+    for b in basin:
+        for i in range(n):
+            if i not in basin:
+                ringprob[i] += sink_results[i][b]
+    
+    return ringprob
+
 def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=20,wts=None):
     """
     This function computes hub scores, which are the probabilities that
@@ -228,20 +249,20 @@ def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=20,wts=None):
 
     # make extended sink_matrix
     n = transmat.shape[0]
-    ext_transmat = extend(transmat,hubstates)
+    ext_transmat = _extend(transmat,hubstates)
 
     flat_sink = [i for b in basins for i in b]
     flat_sink_ext = flat_sink + [i + n for i in flat_sink]
 
-    sink_mat = make_sink(ext_transmat,flat_sink_ext)
+    sink_mat = _make_sink(ext_transmat,flat_sink_ext)
 
-    sink_results = trans_mult_iter(sink_mat,tol,maxstep)
+    sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
 
     if wts is None:
         wts = eig_weights(transmat)
 
     h = np.zeros((2,2),dtype=float)
-    ring = [getring(transmat,b,eig_weights) for b in basins]
+    ring = [_getring(transmat,b,eig_weights,tol,maxstep) for b in basins]
 
     for source,sink in [[0,1],[1,0]]:
         for i,p in enumerate(ring[source]):
