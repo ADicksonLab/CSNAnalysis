@@ -329,3 +329,13 @@ class CSN(object):
             
         return full_comm
 
+    def idxs_to_trim(self,idxs):
+        """
+        Converts a list of idxs to trim_idxs.
+
+        idxs -- List of states in the transition matrix. Elements should be
+                integers from 0 to nstates.
+        """
+
+        return [self.trim_indices.index(i) for i in idxs if i in self.trim_indices]
+        
