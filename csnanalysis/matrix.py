@@ -38,6 +38,9 @@ def _make_sink(transmat,sink_states):
     """
     sink_mat = transmat.copy()
 
+    # remove redundant elements in sink_states
+    sink_states = list(set(sink_states))
+    
     set_to_one = np.zeros(len(sink_states),dtype=bool)
     for i in range(len(sink_mat.data)):
         if sink_mat.col[i] in sink_states:
@@ -58,8 +61,10 @@ def _make_sink(transmat,sink_states):
 
     # check if sink_mat columns still sum to 1
     minval = sink_mat.toarray().sum(axis=0).min()
-    if minval < 0.99999:
-        raise ValueError("Error! Columns no longer sum to one in _make_sink!")
+    maxval = sink_mat.toarray().sum(axis=0).max()
+    if minval < 0.99999 or maxval > 1.00001:
+        arg = sink_mat.toarray().sum(axis=0).argmax()
+        raise ValueError("Error! Columns no longer sum to one in _make_sink! (arg = {0})".format(arg))
 
     return sink_mat
     
@@ -96,7 +101,7 @@ def mult_weights(transmat,tol=1e-6):
     Output:     An array of weights of size N.
     """
 
-    banded_mat = trans_mult_iter(transmat,tol)
+    banded_mat = _trans_mult_iter(transmat,tol)
     return banded_mat[:,0]
 
 def _trans_mult_iter(transmat,tol,maxstep=20):
@@ -108,7 +113,7 @@ def _trans_mult_iter(transmat,tol,maxstep=20):
         t = transmat.copy()
     else:
         t = transmat.toarray()
-
+        
     var = 1
     step = 0
     while (var > tol) and (step < maxstep):
@@ -144,7 +149,6 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
 
     flat_sink = [i for b in basins for i in b]
     sink_mat = _make_sink(transmat,flat_sink)
-
     sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
 
     committor = np.zeros((transmat.shape[0],len(basins)),dtype=float)
