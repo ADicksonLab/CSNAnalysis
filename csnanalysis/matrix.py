@@ -1,4 +1,3 @@
-
 import scipy
 import numpy as np
 from itertools import compress
@@ -13,9 +12,9 @@ def count_to_trans(countmat):
     for i,c in enumerate(colsums):
         if c > 0:
             tmp[:,i] /= c
-        
+
     return(scipy.sparse.coo_matrix(tmp))
-        
+
 def symmetrize_matrix(countmat):
     """
     Symmetrizes a count matrix (in scipy sparse format).
@@ -29,7 +28,7 @@ def _make_sink(transmat,sink_states):
 
     Input:
 
-    transmat -- An N x N transition matrix in scipy sparse coo format.  
+    transmat -- An N x N transition matrix in scipy sparse coo format.
                 Columns should sum to 1. Indices: [to][from].
 
     sink_states: A list of integers denoting sinks.
@@ -40,7 +39,7 @@ def _make_sink(transmat,sink_states):
 
     # remove redundant elements in sink_states
     sink_states = list(set(sink_states))
-    
+
     set_to_one = np.zeros(len(sink_states),dtype=bool)
     for i in range(len(sink_mat.data)):
         if sink_mat.col[i] in sink_states:
@@ -55,7 +54,7 @@ def _make_sink(transmat,sink_states):
     sink_mat.row = np.append(sink_mat.row,statelist)
     sink_mat.col = np.append(sink_mat.col,statelist)
     sink_mat.data = np.append(sink_mat.data,[1 for i in statelist])
-    
+
     # remove zeros
     sink_mat.eliminate_zeros()
 
@@ -67,15 +66,15 @@ def _make_sink(transmat,sink_states):
         raise ValueError("Error! Columns no longer sum to one in _make_sink! (arg = {0})".format(arg))
 
     return sink_mat
-    
+
 def eig_weights(transmat):
     """
     Calculates the weights as the top eigenvector of the transition matrix.
 
     Input:
 
-    transmat -- An N x N transition matrix as a numpy array or in 
-                scipy sparse coo format.  Columns should sum to 1. 
+    transmat -- An N x N transition matrix as a numpy array or in
+                scipy sparse coo format.  Columns should sum to 1.
                 Indices: [to][from]
 
     Output:     An array of weights of size N.
@@ -83,7 +82,7 @@ def eig_weights(transmat):
 
     vals, vecs = scipy.sparse.linalg.eigs(transmat,k=1)
     return np.real(vecs[:,0])/np.real(vecs[:,0].sum())
-    
+
 def mult_weights(transmat,tol=1e-6):
     """
     Calculates the steady state weights as the columns of transmat^infinity.
@@ -92,8 +91,8 @@ def mult_weights(transmat,tol=1e-6):
 
     Input:
 
-    transmat -- An N x N transition matrix as a numpy array or in 
-                scipy sparse coo format.  Columns should sum to 1. 
+    transmat -- An N x N transition matrix as a numpy array or in
+                scipy sparse coo format.  Columns should sum to 1.
                 Indices: [to][from]
 
     tol      -- Threshold for stopping the iterative multiplication.
@@ -106,14 +105,14 @@ def mult_weights(transmat,tol=1e-6):
 
 def _trans_mult_iter(transmat,tol,maxstep=20):
     """
-    Performs iterative multiplication of transmat until the maximum variation in 
+    Performs iterative multiplication of transmat until the maximum variation in
     the rows is less than tol.
     """
     if type(transmat) is np.ndarray:
         t = transmat.copy()
     else:
         t = transmat.toarray()
-        
+
     var = 1
     step = 0
     while (var > tol) and (step < maxstep):
@@ -133,8 +132,8 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
     and a list of states that comprise the basins.
 
     Input:
-    
-    transmat -- An N x N transition matrix in scipy sparse coo format.  
+
+    transmat -- An N x N transition matrix in scipy sparse coo format.
                 Columns should sum to 1. Indices: [to][from]
 
     basins -- A list of lists, describing which states make up the
@@ -152,7 +151,7 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
     sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
 
     committor = np.zeros((transmat.shape[0],len(basins)),dtype=float)
-    
+
     for i in range(transmat.shape[0]):
         comm_done = False
         for j,b in enumerate(basins):
@@ -238,15 +237,15 @@ def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=30,wts=None):
     Dickson, A and Brooks III, CL. JCTC, 8, 3044-3052 (2012).
 
     Input:
-    
-    transmat -- An N x N transition matrix in scipy sparse coo format.  
+
+    transmat -- An N x N transition matrix in scipy sparse coo format.
                 Columns should sum to 1. Indices: [to][from]
 
     hubstates -- A list describing the states in transmat that make up
               the hub being measured.
 
     basins -- A list of two lists, describing which two states make up the
-              basins of attraction.  
+              basins of attraction.
               e.g. [[basin_a_1,basin_a_2,...],[basin_b_1,basin_b_2,...]].
 
     wts    -- The equilibrium weights of all states in transmat.  If this is not
