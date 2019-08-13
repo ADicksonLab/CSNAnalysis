@@ -275,7 +275,12 @@ class CSN(object):
 
         return full_wts
 
-    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20):
+    def calc_committors(self, basins,
+                        labels=None,
+                        basin_labels=None,
+                        add_basins=False,
+                        tol=1e-6,
+                        maxstep=20):
         """
         Calculates committor probabilities between an arbitrary set of N basins.
 
