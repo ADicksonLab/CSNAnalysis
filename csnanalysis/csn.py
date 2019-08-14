@@ -1,9 +1,17 @@
+import itertools
+from copy import deepcopy
+
 import scipy
 import networkx as nx
 import numpy as np
-from csnanalysis.matrix import *
-import itertools
-from copy import deepcopy
+
+from csnanalysis.matrix import (
+    count_to_trans,
+    symmetrize_matrix,
+    eig_weights,
+    mult_weights,
+    committor,
+)
 
 class CSN(object):
 
