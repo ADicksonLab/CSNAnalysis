@@ -1,9 +1,17 @@
+import itertools
+from copy import deepcopy
+
 import scipy
 import networkx as nx
 import numpy as np
-from csnanalysis.matrix import *
-import itertools
-from copy import deepcopy
+
+from csnanalysis.matrix import (
+    count_to_trans,
+    symmetrize_matrix,
+    eig_weights,
+    mult_weights,
+    committor,
+)
 
 class CSN(object):
 
@@ -275,7 +283,12 @@ class CSN(object):
 
         return full_wts
 
-    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20):
+    def calc_committors(self, basins,
+                        labels=None,
+                        basin_labels=None,
+                        add_basins=False,
+                        tol=1e-6,
+                        maxstep=20):
         """
         Calculates committor probabilities between an arbitrary set of N basins.
 
