@@ -9,15 +9,18 @@ and graph visualization programs (e.g. Gephi).
 CSNAnalysis is currently in beta.
 
 * Installation
-To install CSNAnalysis, clone one of the releases and manually install it.
 
-#+BEGIN_SRC bash
-  git clone https://github.com/ADicksonLab/CSNAnalysis
-  cd CSNAnalysis
+To install CSNAnalysis, you can get the latest:
 
-  # install
-  pip install --user -e .
-#+END_SRC
+#+begin_src bash
+  pip install git+https://github.com/ADicksonLab/CSNAnalysis
+#+end_src
+
+Or one of the releases:
+
+#+begin_src bash
+  pip install git+https://github.com/ADicksonLab/CSNAnalysis@v0.3
+#+end_src
 
 * Dependencies
 - numpy
