@@ -50,10 +50,13 @@ def _make_sink(transmat,sink_states):
                 set_to_one[sink_states.index(sink_mat.col[i])] = True
 
     # set diagonal elements to 1 that haven't been set to one already
-    statelist = list(compress(sink_states, np.logical_not(set_to_one)))
-    sink_mat.row = np.append(sink_mat.row,statelist)
-    sink_mat.col = np.append(sink_mat.col,statelist)
-    sink_mat.data = np.append(sink_mat.data,[1 for i in statelist])
+    statelist = np.asarray(list(compress(sink_states, np.logical_not(set_to_one))),
+                           dtype=int)
+
+    if statelist.shape[0] > 0:
+        sink_mat.row = np.append(sink_mat.row, statelist)
+        sink_mat.col = np.append(sink_mat.col,statelist)
+        sink_mat.data = np.append(sink_mat.data, np.ones_like(statelist, dtype=int))
 
     # remove zeros
     sink_mat.eliminate_zeros()
