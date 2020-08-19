@@ -1,6 +1,7 @@
 
 import scipy
 import numpy as np
+from itertools import compress
 
 def count_to_trans(countmat):
     """
@@ -37,6 +38,9 @@ def _make_sink(transmat,sink_states):
     """
     sink_mat = transmat.copy()
 
+    # remove redundant elements in sink_states
+    sink_states = list(set(sink_states))
+    
     set_to_one = np.zeros(len(sink_states),dtype=bool)
     for i in range(len(sink_mat.data)):
         if sink_mat.col[i] in sink_states:
@@ -46,16 +50,21 @@ def _make_sink(transmat,sink_states):
                 sink_mat.data[i] = 1.
                 set_to_one[sink_states.index(sink_mat.col[i])] = True
 
-    # set diagonal elements to 1
-    for i in range(len(sink_states)):
-        if not set_to_one[i]:
-            # add element sink_mat[sink_states[i]][sink_states[i]] = 1
-            np.append(sink_mat.row,sink_states[i])
-            np.append(sink_mat.col,sink_states[i])
-            np.append(sink_mat.data,1.)
-
+    # set diagonal elements to 1 that haven't been set to one already
+    statelist = list(compress(sink_states, np.logical_not(set_to_one)))
+    sink_mat.row = np.append(sink_mat.row,statelist)
+    sink_mat.col = np.append(sink_mat.col,statelist)
+    sink_mat.data = np.append(sink_mat.data,[1 for i in statelist])
+    
     # remove zeros
     sink_mat.eliminate_zeros()
+
+    # check if sink_mat columns still sum to 1
+    minval = sink_mat.toarray().sum(axis=0).min()
+    maxval = sink_mat.toarray().sum(axis=0).max()
+    if minval < 0.99999 or maxval > 1.00001:
+        arg = sink_mat.toarray().sum(axis=0).argmax()
+        raise ValueError("Error! Columns no longer sum to one in _make_sink! (arg = {0})".format(arg))
 
     return sink_mat
     
@@ -104,17 +113,17 @@ def _trans_mult_iter(transmat,tol,maxstep=20):
         t = transmat.copy()
     else:
         t = transmat.toarray()
-
+        
     var = 1
     step = 0
-    while var > tol or step > maxstep:
+    while (var > tol) and (step < maxstep):
         newmat = np.matmul(t,t)
         var = np.abs(newmat-t).max()
         t = newmat.copy()
         step += 1
 
-    if step > maxstep:
-        print("Warning: iterative multiplication not converged after",maxstep,"steps: (var = ",var)
+    if step == maxstep and var > tol:
+        print("Warning: iterative multiplication not converged after",step,"steps: (var = ",var,"), (tol = ",tol,")")
 
     return t
 
@@ -143,7 +152,6 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
 
     flat_sink = [i for b in basins for i in b]
     sink_mat = _make_sink(transmat,flat_sink)
-
     sink_results = _trans_mult_iter(sink_mat,tol,maxstep)
 
     committor = np.zeros((transmat.shape[0],len(basins)),dtype=float)
@@ -252,7 +260,7 @@ def _extend(transmat,hubstates):
     ext_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(2*n,2*n))
     return ext_mat
 
-def _getring(transmat,basin,eig_weights,tol,maxstep):
+def _getring(transmat,basin,wts,tol,maxstep):
     """
     Given a transition matrix, and a set of states that form a basin,
     this returns a vector describing how probability exits that basin.
@@ -269,11 +277,11 @@ def _getring(transmat,basin,eig_weights,tol,maxstep):
     for b in basin:
         for i in range(n):
             if i not in basin:
-                ringprob[i] += sink_results[i][b]
-    
-    return ringprob
+                ringprob[i] += wts[b]*sink_results[i][b]
 
-def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=20,wts=None):
+    return ringprob/wts[basin].sum()
+
+def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=30,wts=None):
     """
     This function computes hub scores, which are the probabilities that
     transitions between a set of communities will use a given community as
@@ -315,8 +323,9 @@ def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=20,wts=None):
     if wts is None:
         wts = eig_weights(transmat)
 
+
     h = np.zeros((2,2),dtype=float)
-    ring = [_getring(transmat,b,eig_weights,tol,maxstep) for b in basins]
+    ring = [_getring(transmat,b,wts,tol,maxstep) for b in basins]
 
     for source,sink in [[0,1],[1,0]]:
         for i,p in enumerate(ring[source]):

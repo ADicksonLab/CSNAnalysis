@@ -9,8 +9,8 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'Numpy',
-        'NetworkX>=2.1',
-        'Scipy>=0.19',
+        'numpy',
+        'networkx>=2.1',
+        'scipy>=0.19',
     ],
 )
