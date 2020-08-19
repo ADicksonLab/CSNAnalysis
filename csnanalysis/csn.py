@@ -1,12 +1,20 @@
-import scipy
-import networkx as nx
-import numpy as np
-from csnanalysis.matrix import *
 import itertools
 from copy import deepcopy
 
+import scipy
+import networkx as nx
+import numpy as np
+
+from csnanalysis.matrix import (
+    count_to_trans,
+    symmetrize_matrix,
+    eig_weights,
+    mult_weights,
+    committor,
+)
+
 class CSN(object):
-    
+
     def __init__(self, counts, symmetrize=False):
         """
         Initializes a CSN object using a counts matrix.  This can either be a numpy array,
@@ -28,16 +36,16 @@ class CSN(object):
             raise ValueError("Count matrix is not square: ",self.countmat.shape)
 
         totcounts = self.countmat.sum(axis=1).tolist()
-        
+
         self.symmetrize = symmetrize
         if self.symmetrize:
             self.countmat = symmetrize_matrix(self.countmat)
 
-        self.nnodes = self.countmat.shape[0]        
+        self.nnodes = self.countmat.shape[0]
         self.transmat = count_to_trans(self.countmat)
 
         self.trim_transmat = None
-            
+
         # initialize networkX directed graph
         self.graph = nx.DiGraph()
         labels = [{'label' : i, 'count' : int(totcounts[i][0])} for i in range(self.nnodes)]
@@ -52,8 +60,8 @@ class CSN(object):
         """
         Writes node and edge files for import into the Gephi network visualization program.
 
-        cols  --  A list of columns that should be written to the node file.  ID and label are 
-                  included by default.  'all' will include every attribute attached to the 
+        cols  --  A list of columns that should be written to the node file.  ID and label are
+                  included by default.  'all' will include every attribute attached to the
                   nodes in self.graph.
 
         """
@@ -64,7 +72,7 @@ class CSN(object):
                 cols = ['label'] + cols
             if 'ID' not in cols:
                 cols = ['ID'] + cols
-        
+
         with open(node_name,mode='w') as f:
             f.write(" ".join(cols)+"\n")
             for i in range(self.nnodes):
@@ -97,7 +105,7 @@ class CSN(object):
         attr = {}
         for i, v in enumerate(values):
             attr[i] = v
-            
+
         nx.set_node_attributes(self.graph,values=attr,name=name)
 
     def set_colors(self, rgb):
@@ -119,7 +127,7 @@ class CSN(object):
         """
         Adds x,y positions to each node for gexf export of the graph.
 
-        xy: A dict that stores the xy positions of each node.  
+        xy: A dict that stores the xy positions of each node.
 
         Example: xy[0]['x'] = 0.5
                  xy[0]['y'] = 1.6
@@ -152,8 +160,8 @@ class CSN(object):
                     rgb[node][colors[i]] = int(highc*comm[node,i]/maxc)
 
         return rgb
-        
-            
+
+
     def trim(self, by_inflow=True, by_outflow=True, min_count=0):
         """
         Trims a graph to delete nodes that are not connected to the main
@@ -166,8 +174,8 @@ class CSN(object):
 
         min_count: nodes that do not have a count > min_count will be deleted
 
-        Trimmed graph is saved as self.trim_graph. The trimmed transition matrix 
-        is saved as self.trim_transmat, and the count matrix is saved as 
+        Trimmed graph is saved as self.trim_graph. The trimmed transition matrix
+        is saved as self.trim_transmat, and the count matrix is saved as
         self.trim_countmat.
 
         The mapping from the nodes in the trimmed set to the full set is given by
@@ -203,7 +211,7 @@ class CSN(object):
         rows = self.countmat.row
         cols = self.countmat.col
         data = self.countmat.data
-        
+
         for i in range(len(data)):
             if mask[rows[i]] is False and mask[cols[i]] is True:
                 if cols[i] in to_add:
@@ -216,12 +224,12 @@ class CSN(object):
         for ind,full_ind in enumerate(self.trim_indices):
             if full_ind in to_add:
                 tmp_arr[ind][ind] += to_add[full_ind]
-            
+
         self.trim_countmat = scipy.sparse.coo_matrix(tmp_arr)
         if self.symmetrize:
             self.trim_countmat = symmetrize_matrix(self.trim_countmat)
 
-        self.trim_nnodes = self.trim_countmat.shape[0]        
+        self.trim_nnodes = self.trim_countmat.shape[0]
         self.trim_transmat = count_to_trans(self.trim_countmat)
 
         is_trim = np.zeros((self.nnodes))
@@ -230,10 +238,9 @@ class CSN(object):
                 is_trim[i] = 1
         self.add_attr('trim',is_trim)
                 
-
     def calc_eig_weights(self,label='eig_weights'):
         """
-        Calculates weights of states using the highest Eigenvalue of the 
+        Calculates weights of states using the highest Eigenvalue of the
         transition matrix.  By default it uses self.trim_transmat, but will
         use self.transmat if no trimming has been done.
 
@@ -258,7 +265,7 @@ class CSN(object):
 
     def calc_mult_weights(self,label='mult_weights',tol=1e-6):
         """
-        Calculates weights of states using iterative multiplication of the 
+        Calculates weights of states using iterative multiplication of the
         transition matrix.  By default it uses self.trim_transmat, but will
         use self.transmat if no trimming has been done.
 
@@ -278,10 +285,16 @@ class CSN(object):
 
         fw_float = [float(i) for i in full_wts]
         self.add_attr(label, fw_float)
-            
+
         return full_wts
 
-    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20,method='iter'):
+    def calc_committors(self, basins,
+                        labels=None,
+                        basin_labels=None,
+                        add_basins=False,
+                        tol=1e-6,
+                        maxstep=20,
+                        method='iter'):
         """
         Calculates committor probabilities between an arbitrary set of N basins.
 
@@ -334,7 +347,7 @@ class CSN(object):
         for i in range(len(basins)):
             fc_float = [float(i) for i in full_comm[:,i]]
             self.add_attr(labels[i], fc_float)
-            
+
         if add_basins:
             if basin_labels is None:
                 basin_labels = [str(i) for i in range(len(basins))]
@@ -343,7 +356,7 @@ class CSN(object):
                 bvec[b] = 1
                 bv_int = [int(i) for i in bvec]
                 self.add_attr(basin_labels[i],bv_int)
-            
+
         return full_comm
 
     def idxs_to_trim(self,idxs):
@@ -355,4 +368,3 @@ class CSN(object):
         """
 
         return [self.trim_indices.index(i) for i in idxs if i in self.trim_indices]
-        
