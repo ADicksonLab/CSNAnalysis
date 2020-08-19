@@ -223,6 +223,12 @@ class CSN(object):
 
         self.trim_nnodes = self.trim_countmat.shape[0]        
         self.trim_transmat = count_to_trans(self.trim_countmat)
+
+        is_trim = np.zeros((self.nnodes))
+        for i in range(self.nnodes):
+            if i not in self.trim_indices:
+                is_trim[i] = 1
+        self.add_attr('trim',is_trim)
                 
 
     def calc_eig_weights(self,label='eig_weights'):
@@ -275,7 +281,7 @@ class CSN(object):
             
         return full_wts
 
-    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20):
+    def calc_committors(self,basins,labels=None,basin_labels=None,add_basins=False,tol=1e-6,maxstep=20,method='iter'):
         """
         Calculates committor probabilities between an arbitrary set of N basins.
 
@@ -289,13 +295,20 @@ class CSN(object):
         tol        -- Tolerance of iterative multiplication process
                       (see matrix.trans_mult_iter)
         maxstep    -- Maximum number of iteractions of multiplication process.
+        method     -- 'iter' for iterative multiplication, 'linalg' for 
+                      linear algebra solve (two-basin only)
 
         The committors are also returned from the function as a numpy array.
         """
 
+        assert method in ['iter','linalg'], 'Error! method must be either iter or linalg'
+
         if self.trim_transmat is None:
             # use full transition matrix
-            full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
+            if method == 'iter':
+                full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
+            elif method == 'linalg':
+                full_comm = committor_linalg(self.transmat,basins)
         else:
             # use trimmed transition matrix
             trim_basins = []
@@ -306,7 +319,11 @@ class CSN(object):
                         trim_basins[i].append(self.trim_indices.index(state))
                     except:
                         pass
-            comm = committor(self.trim_transmat,trim_basins,tol=tol,maxstep=maxstep)
+            if method == 'iter':
+                comm = committor(self.trim_transmat,trim_basins,tol=tol,maxstep=maxstep)
+            elif method == 'linalg':
+                comm = committor_linalg(self.trim_transmat,trim_basins)
+
             full_comm = np.zeros((self.transmat.shape[0],len(basins)),dtype=float)
             for i,ind in enumerate(self.trim_indices):
                 full_comm[ind] = comm[i]

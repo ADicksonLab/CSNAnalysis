@@ -92,7 +92,7 @@ def mult_weights(transmat,tol=1e-6):
     Output:     An array of weights of size N.
     """
 
-    banded_mat = trans_mult_iter(transmat,tol)
+    banded_mat = _trans_mult_iter(transmat,tol)
     return banded_mat[:,0]
 
 def _trans_mult_iter(transmat,tol,maxstep=20):
@@ -121,7 +121,10 @@ def _trans_mult_iter(transmat,tol,maxstep=20):
 def committor(transmat,basins,tol=1e-6,maxstep=20):
     """
     This function computes committor probabilities, given a transition matrix
-    and a list of states that comprise the basins.
+    and a list of states that comprise the basins. It uses iterative multiplication of
+    a modified transition matrix, with identity vectors for each basin state.
+
+    Note that this method works regardless of the number of basins.
 
     Input:
     
@@ -159,6 +162,57 @@ def committor(transmat,basins,tol=1e-6,maxstep=20):
                     committor[i][j] += sink_results[bstate][i]
 
     return committor
+
+def committor_linalg(transmat,basins):
+    """
+    This function computes committor probabilities, given a transition matrix
+    and a list of states that comprise the basins, by solving the system
+    of equations:
+
+    0 = q_i - sum_j T_ij * q_j      for i not in a basin
+
+    by solving the equation AQ = B.
+
+    Note: this requires that the number of basins is 2, and q_i is the 
+    probability that a trajectory in state i commits to the SECOND basin.
+
+    Input:
+    
+    transmat -- An N x N transition matrix in scipy sparse coo format.  
+                Columns should sum to 1. Indices: [to][from]
+
+    basins -- A list of lists, describing which states make up the
+              basins of attraction.  There can be any number of basins.
+              e.g. [[basin1_a,basin1_b,...],[basin2_a,basin2_b,...]]
+
+    Output:   An array of committor probabilities of size N x 2, where 2
+              is the number of basins. Committors will sum to 1 for each state.
+    """
+
+    assert len(basins) == 2, 'Error! linalg method only works with two basins.'
+
+    trans_arr = transmat.toarray()
+    n = trans_arr.shape[0]
+    A_mat = np.zeros((n,n))
+    B_vec = np.zeros((n))
+
+    for i in range(n):
+        A_mat[i,i] = 1
+        if i in basins[0]:
+            B_vec[i] = 0
+        elif i in basins[1]:
+            B_vec[i] = 1
+        else:
+            B_vec[i] = 0
+            for j in range(n):
+                if i != j:
+                    A_mat[i,j] = -trans_arr[j,i]
+                else:
+                    A_mat[i,i] = 1-trans_arr[j,i]
+
+    Q_vec = np.linalg.solve(A_mat,B_vec)
+
+    return np.array([1-Q_vec,Q_vec]).T
 
 def _extend(transmat,hubstates):
     """
