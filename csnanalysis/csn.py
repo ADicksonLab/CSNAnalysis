@@ -162,7 +162,7 @@ class CSN(object):
         return rgb
 
 
-    def trim(self, by_inflow=True, by_outflow=True, min_count=1):
+    def trim(self, by_inflow=True, by_outflow=True, min_count=None):
         """
         Trims a graph to delete nodes that are not connected to the main
         component, which is the component containing the most-sampled node (MSN)
@@ -182,13 +182,16 @@ class CSN(object):
         self.trim_indices.
         """
 
-        totcounts = self.countmat.sum(axis=0)
+        totcounts = self.countmat.toarray().sum(axis=0)
         msn = totcounts.argmax()
 
         mask = np.ones(self.nnodes,dtype=bool)
         oldmask = np.zeros(self.nnodes,dtype=bool)
 
-        mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
+        if min_count is not None:
+            mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
+        else:
+            mask[[i for i in range(self.nnodes) if totcounts[i] == 0]] = False
 
         while (mask != oldmask).any():
 
@@ -206,13 +209,14 @@ class CSN(object):
                 mask[[i for i in range(self.nnodes) if i not in upstream]] = False
 
         # count all transitions to masked states and add these as self-transitions
+        # rows = to, cols = from
         to_add = {}
         rows = self.countmat.row
         cols = self.countmat.col
         data = self.countmat.data
 
         for i in range(len(data)):
-            if mask[rows[i]] is False and mask[cols[i]] is True:
+            if mask[rows[i]] == False and mask[cols[i]] == True:
                 if cols[i] in to_add:
                     to_add[cols[i]] += data[i]
                 else:
@@ -224,7 +228,9 @@ class CSN(object):
             if full_ind in to_add:
                 tmp_arr[ind][ind] += to_add[full_ind]
 
+        assert tmp_arr.sum(axis=0).min() > 0, 'Error! A state in the trimmed countmat has no transitions'
         self.trim_countmat = scipy.sparse.coo_matrix(tmp_arr)
+
         if self.symmetrize:
             self.trim_countmat = symmetrize_matrix(self.trim_countmat)
 
