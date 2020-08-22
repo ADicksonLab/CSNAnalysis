@@ -182,7 +182,7 @@ class CSN(object):
         self.trim_indices.
         """
 
-        totcounts = self.countmat.sum(axis=1)
+        totcounts = self.countmat.sum(axis=0)
         msn = totcounts.argmax()
 
         mask = np.ones(self.nnodes,dtype=bool)
