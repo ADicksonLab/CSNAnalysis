@@ -162,7 +162,7 @@ class CSN(object):
         return rgb
 
 
-    def trim(self, by_inflow=True, by_outflow=True, min_count=0):
+    def trim(self, by_inflow=True, by_outflow=True, min_count=1):
         """
         Trims a graph to delete nodes that are not connected to the main
         component, which is the component containing the most-sampled node (MSN)
@@ -188,8 +188,7 @@ class CSN(object):
         mask = np.ones(self.nnodes,dtype=bool)
         oldmask = np.zeros(self.nnodes,dtype=bool)
 
-        if min_count > 0:
-            mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
+        mask[[i for i in range(self.nnodes) if totcounts[i] < min_count]] = False
 
         while (mask != oldmask).any():
 
