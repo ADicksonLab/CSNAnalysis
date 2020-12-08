@@ -108,6 +108,18 @@ class CSN(object):
 
         nx.set_node_attributes(self.graph,values=attr,name=name)
 
+    def add_trim_attr(self, name, values):
+        """
+        Adds an attribute to the set of nodes in the CSN using the trim indices.
+        """
+
+        attr = {}
+        for i, idx in enumerate(self.trim_indices):
+            attr[idx] = values[i]
+
+        nx.set_node_attributes(self.graph,values=attr,name=name)
+
+
     def set_colors(self, rgb):
         """
         Adds colors to each node for gexf export of the graph.
