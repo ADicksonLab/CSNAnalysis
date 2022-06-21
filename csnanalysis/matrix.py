@@ -61,12 +61,9 @@ def _make_sink(transmat,sink_states):
     # remove zeros
     sink_mat.eliminate_zeros()
 
-    # check if sink_mat columns still sum to 1
-    minval = sink_mat.toarray().sum(axis=0).min()
-    maxval = sink_mat.toarray().sum(axis=0).max()
-    if minval < 0.99999 or maxval > 1.00001:
-        arg = sink_mat.toarray().sum(axis=0).argmax()
-        raise ValueError("Error! Columns no longer sum to one in _make_sink! (arg = {0})".format(arg))
+    # check if sink_mat is well-conditioned
+    if not well_conditioned(sink_mat.toarray()):
+        raise ValueError("Error! sink matrix is no longer well-conditioned in make_sink!")
 
     return sink_mat
 
@@ -346,3 +343,57 @@ def hubscores(transmat,hubstates,basins,tol=1e-6,maxstep=30,wts=None):
                     h[source][sink] += p*c_yes/(c_no+c_yes)
 
     return [h[0,1],h[1,0]]
+
+def get_eigenvectors(transmat, n_eig=3, return_wt_vec=False):
+    """
+    This function returns a set of eigenvectors with the highest
+    eigenvalues. It wraps the scipy.linalg.eig function.
+
+    Input:
+    
+    transmat -- An N x N transition matrix in scipy sparse coo format.
+                Columns should sum to 1. Indices: [to][from]
+
+    n_eig    -- The number of eigenvectors to return
+
+    return_wt_vec -- Whether or not to include the eigenvector with
+                     eigenvalue = 1.  Note that this is equal to the 
+                     steady state weights.
+
+    Output:
+
+    eig_vecs -- A numpy array (N, n_eig) of eigenvector elements (real part only)
+
+    eig_vals -- A numpy array of the n_eig eigenvalues (real part only)
+
+    eig_vecs_imag -- A numpy array (N, n_eig) of eigenvector elements (imaginary part only)
+
+    eig_vals_imag - A numpy array of the n_eig eigenvalues (imaginary part only)
+    """
+
+    e_vals_complex, e_vecs_complex = scipy.linalg.eig(transmat)
+
+    e_vals_real = np.real(e_vals_complex)
+    e_vals_imag = np.imag(e_vals_complex)
+
+    sort_idxs = list(np.argsort(e_vals_real))
+
+    if return_wt_vec:
+        idxs_to_return = sort_idxs[-n_eig:]
+    else:
+        idxs_to_return = sort_idxs[-(n_eig+1):-1]
+
+    # change order to highest to lowest
+    idxs_to_return.reverse()
+
+    return np.real(e_vecs_complex)[:,idxs_to_return], e_vals_real[idxs_to_return], \
+        np.imag(e_vecs_complex)[:,idxs_to_return], e_vals_imag[idxs_to_return]
+
+def well_conditioned(transmat):
+    tol = 1e-5
+    minval = transmat.sum(axis=0).min()
+    maxval = transmat.sum(axis=0).max()
+    if 1 - minval > tol or maxval - 1 > tol:
+        return False
+    else:
+        return True

@@ -11,6 +11,9 @@ from csnanalysis.matrix import (
     eig_weights,
     mult_weights,
     committor,
+    committor_linalg,
+    get_eigenvectors,
+    well_conditioned,
 )
 
 class CSN(object):
@@ -108,6 +111,21 @@ class CSN(object):
 
         nx.set_node_attributes(self.graph,values=attr,name=name)
 
+    def add_trim_attr(self, name, values, default=0):
+        """
+        Adds an attribute to the set of nodes in the CSN.
+        Values should be an iterable of the size of csn.trim_indices
+        """
+        attr = {}
+        for i in range(self.nnodes):
+            if i in self.trim_indices:
+                trim_idx = self.trim_indices.index(i)
+                attr[i] = values[trim_idx]
+            else:
+                attr[i] = default
+
+        nx.set_node_attributes(self.graph,values=attr,name=name)
+        
     def set_colors(self, rgb):
         """
         Adds colors to each node for gexf export of the graph.
@@ -242,6 +260,9 @@ class CSN(object):
             if i not in self.trim_indices:
                 is_trim[i] = 1
         self.add_attr('trim',is_trim)
+
+        if not well_conditioned(self.trim_transmat.toarray()):
+            print("Warning: trimmed transition matrix is not well-conditioned.")
                 
     def calc_eig_weights(self,label='eig_weights'):
         """
@@ -322,21 +343,23 @@ class CSN(object):
         assert method in ['iter','linalg'], 'Error! method must be either iter or linalg'
 
         if self.trim_transmat is None:
+            assert well_conditioned(self.transmat.toarray()), "Error: cannot calculate committors from transition matrix. Try trimming first."
+
             # use full transition matrix
             if method == 'iter':
                 full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
             elif method == 'linalg':
                 full_comm = committor_linalg(self.transmat,basins)
+                    
         else:
             # use trimmed transition matrix
             trim_basins = []
             for i,b in enumerate(basins):
                 trim_basins.append([])
-                for j,state in enumerate(b):
-                    try:
+                for state in b:
+                    if state in self.trim_indices:
                         trim_basins[i].append(self.trim_indices.index(state))
-                    except:
-                        pass
+
             if method == 'iter':
                 comm = committor(self.trim_transmat,trim_basins,tol=tol,maxstep=maxstep)
             elif method == 'linalg':
@@ -373,3 +396,64 @@ class CSN(object):
         """
 
         return [self.trim_indices.index(i) for i in idxs if i in self.trim_indices]
+
+    def calc_eigvectors(self, n_eig=3,
+                        include_wt_vec=False,
+                        save_to_graph=True,
+                        save_imag_to_graph=False,
+                        save_label='eig'):
+        """
+        Calculates committor probabilities between an arbitrary set of N basins.
+
+        n_eig    -- The number of eigenvectors to return
+
+        include_wt_vec -- Whether or not to include the eigenvector with 
+                          eigenvalue = 1.  Note that this is equal to the 
+                          steady state weights.
+
+        save_to_graph -- Whether or not to save the eigenvectors to the graph
+                         (real part).
+
+        save_imag_to_graph -- Whether or not to save the eigenvectors to the 
+                              graph (imaginary part).
+
+        save_label -- Labels given to each eigenvector when saving to the graph.
+                      Indices are appended and counting starts at zero (e.g. 
+                      eig0, eig1, ..).  If imaginary part is saved (eig0_imag, eig1_imag, ...)
+
+        Output:
+        eig_vecs -- A numpy array (N, n_eig) of eigenvector elements (real part only)
+
+        eig_vals -- A numpy array of the n_eig eigenvalues (real part only)
+        
+        eig_vecs_imag -- A numpy array (N, n_eig) of eigenvector elements (imaginary part only)
+        
+        eig_vals_imag - A numpy array of the n_eig eigenvalues (imaginary part only)
+
+        """
+
+        if self.trim_transmat is None:
+            # use full transition matrix
+            vec_real, val_real, vec_imag, val_imag = get_eigenvectors(self.transmat.toarray(), n_eig=n_eig, return_wt_vec=include_wt_vec)
+        else:
+            # use trimmed transition matrix
+            trim_vec_real, val_real, trim_vec_imag, val_imag = get_eigenvectors(self.trim_transmat.toarray(), n_eig=n_eig, return_wt_vec=include_wt_vec)
+
+            vec_real = np.zeros((self.transmat.shape[0],n_eig),dtype=float)
+            vec_imag = np.zeros((self.transmat.shape[0],n_eig),dtype=float)
+            for i,ind in enumerate(self.trim_indices):
+                vec_real[ind] = trim_vec_real[i]
+                vec_imag[ind] = trim_vec_imag[i]
+
+        # add eigenvectors as attributes
+        if save_to_graph:
+            for idx in range(n_eig):
+                label = f'{save_label}{idx}'
+                self.add_attr(label, vec_real[:,idx])
+
+        if save_imag_to_graph:
+            for idx in range(n_eig):
+                label = f'{save_label}{idx}_imag'
+                self.add_attr(label, vec_imag[:,idx])
+
+        return vec_real, val_real, vec_imag, val_imag
