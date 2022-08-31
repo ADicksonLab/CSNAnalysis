@@ -14,6 +14,7 @@ from csnanalysis.matrix import (
     committor_linalg,
     get_eigenvectors,
     well_conditioned,
+    fptd,
 )
 
 class CSN(object):
@@ -211,20 +212,26 @@ class CSN(object):
         else:
             mask[[i for i in range(self.nnodes) if totcounts[i] == 0]] = False
 
+        itercount = 0
+        diff = []
         while (mask != oldmask).any():
 
             oldmask = mask.copy()
             self.trim_indices = [i for i in range(self.nnodes) if mask[i] == True]
             self.trim_graph = self.graph.subgraph(self.trim_indices)
 
+            print(f"Iteration {itercount}:",diff)
+            itercount += 1
+            
             if by_outflow:
-                downstream = nx.dfs_successors(self.trim_graph,msn).values()
-                dlist = list(itertools.chain(*downstream)) + [msn]
-                mask[[i for i in range(self.nnodes) if i not in dlist]] = False
+                downstream = [i for i in self.trim_indices if nx.has_path(self.trim_graph,msn,i)]
+                mask[[i for i in range(self.nnodes) if i not in downstream]] = False
 
             if by_inflow:
-                upstream = list(nx.dfs_predecessors(self.trim_graph,msn).keys()) + [msn]
+                upstream = [i for i in self.trim_indices if nx.has_path(self.trim_graph,i,msn)]
                 mask[[i for i in range(self.nnodes) if i not in upstream]] = False
+
+            diff = [i for i in range(self.nnodes) if mask[i] != oldmask[i]]
 
         # count all transitions to masked states and add these as self-transitions
         # rows = to, cols = from
@@ -310,7 +317,8 @@ class CSN(object):
                 full_wts[ind] = wts[i]
 
         fw_float = [float(i) for i in full_wts]
-        self.add_attr(label, fw_float)
+        if label is not None:
+            self.add_attr(label, fw_float)
 
         return full_wts
 
@@ -386,6 +394,80 @@ class CSN(object):
                 self.add_attr(basin_labels[i],bv_int)
 
         return full_comm
+
+    def calc_mfpt(self,sinks,maxsteps=None,tol=1e-3,sources=None):
+        """
+        Calculates the mean first passage time (MFPT) and the first passage time distribution (FPTD)
+        from every state in the matrix to a set of "sinks".
+
+        sinks -- (list of int) A list of states that will be used as sinks
+
+        stepsize -- (int) The lagtime, in multiples of tau, that is used to compute the MFPT, which is 
+                          also the resolution of the FPTD.
+
+        maxsteps -- (int) The maximum number of steps used to compute the FPTD.
+
+        tol -- (float) The quitting criteria for FPTD calculation.  The calculation will stop if the 
+                       largest "un-sunk" probability is below tol.
+
+        sources -- (None or list of int) List of source states to average over.  If None, will return
+                   MFPT and FPTD of all states.
+        """
+
+        assert tol is not None or maxsteps is not None, "Error: either maxsteps or tol must be defined!"
+
+        if tol is None:
+            tol = 0.0
+        if maxsteps is None:
+            maxsteps = np.inf
+        
+        if self.trim_transmat is None:
+            assert well_conditioned(self.transmat.toarray()), "Error: cannot calculate mfpt from transition matrix. Try trimming first."
+
+            # use full transition matrix
+            full_fptd = fptd(self.transmat,sinks,maxsteps=maxsteps,tol=tol)
+            full_mfpt = np.zeros((self.transmat.shape[0]),dtype=float)
+            for i in range(full_fptd.shape[0]):
+                # loop over exponentially placed timepoints
+                # this entry is the flux between lag*(2**[i]) and lag*(2**[i+1])
+                # avg. of endpoints is (2**(i-1) + 2**(i))
+                full_mfpt += full_fptd[i,:]*(2**(i-1) + 2**(i)) # in units of lagtime
+
+        else:
+            # use trimmed transition matrix
+            trim_sinks = []
+            for state in sinks:
+                if state in self.trim_indices:
+                    trim_sinks.append(self.trim_indices.index(state))
+
+            trim_fptd = fptd(self.trim_transmat,trim_sinks,maxsteps=maxsteps,tol=tol)
+            trim_mfpt = np.zeros((trim_fptd.shape[1]),dtype=float)
+            for i in range(trim_fptd.shape[0]):
+                # loop over exponentially placed timepoints
+                # this entry is the flux between lag*(2**[i]) and lag*(2**[i+1])
+                trim_mfpt += trim_fptd[i,:]*(2**(i-1) + 2**(i)) # in units of lagtime
+
+            full_fptd = np.zeros((trim_fptd.shape[0],self.transmat.shape[0]),dtype=float)
+            full_mfpt = np.zeros((self.transmat.shape[0]),dtype=float)
+            for i,ind in enumerate(self.trim_indices):
+                full_fptd[:,ind] = trim_fptd[:,i]
+                full_mfpt[ind] = trim_mfpt[i]
+
+        if sources is not None:
+            wts = self.calc_mult_weights(label=None,tol=1e-6)
+            wt_sum = wts[sources].sum()
+
+            avg_mfpt = 0
+            avg_fptd = np.zeros((full_fptd.shape[0]))
+            for s in sources:
+                avg_mfpt += full_mfpt[s]*wts[s]
+                avg_fptd += full_fptd[:,s]*wts[s]
+
+            return np.array([avg_mfpt/wt_sum]), np.array([avg_fptd/wt_sum])
+        else:
+            return full_mfpt, full_fptd
+
+        
 
     def idxs_to_trim(self,idxs):
         """

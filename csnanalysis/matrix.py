@@ -103,7 +103,51 @@ def mult_weights(transmat,tol=1e-6):
     banded_mat = _trans_mult_iter(transmat,tol)
     return banded_mat[:,0]
 
-def _trans_mult_iter(transmat,tol,maxstep=20):
+def _renorm(mat,tol=1e-7):
+    """
+    Renormalizes a matrix (to,from) so that its columns sum to one.
+    This is meant to encourage numerical stability during long
+    matrix multiplication chains.
+    """
+    for i in range(mat.shape[1]):
+        col_sum = mat[:,i].sum()
+        assert np.abs(1.0-col_sum) < tol, f"Error! 1 - column sum ({1.0-col_sum}) is greater than tolerance ({tol}) in _renorm!"
+        mat[:,i] /= col_sum
+
+    return mat
+
+def fptd(transmat,sinks,maxsteps=200,tol=0.0):
+    """
+    Calculates the first passage time distribution for transmat with a set
+    of sink states (sinks). The FPTD is evaluated at the set of points lag*2^i.  
+    It will run for a total of maxsteps, or until the maximum "un-sunk" probability 
+    of a state falls below tol.
+    """
+
+    sm = _renorm(_make_sink(transmat,sinks).toarray())
+
+    step = 0
+    non_sinks = [i for i in range(transmat.shape[0]) if i not in sinks]
+    max_prob_to = sm.sum(axis=1)[non_sinks].max()
+
+    fptd = []
+    last_step_warped = np.zeros((transmat.shape[0]))
+    while step < maxsteps and max_prob_to > tol:
+        newmat = _renorm(np.matmul(sm,sm))
+        
+        warped = newmat[sinks,:].sum(axis=0)
+        warped[sinks] = 0
+        fptd.append(warped-last_step_warped)
+        last_step_warped = warped
+        
+        sm = newmat.copy()
+        max_prob_to = sm.sum(axis=1)[non_sinks].max()
+        step += 1
+
+    return np.array(fptd)
+        
+
+def _trans_mult_iter(transmat,tol,maxstep=200):
     """
     Performs iterative multiplication of transmat until the maximum variation in
     the rows is less than tol.
