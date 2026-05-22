@@ -11,6 +11,10 @@ from csnanalysis.matrix import (
     eig_weights,
     mult_weights,
     committor,
+    committor_linalg,
+    get_eigenvectors,
+    well_conditioned,
+    fptd,
 )
 
 class CSN(object):
@@ -108,18 +112,21 @@ class CSN(object):
 
         nx.set_node_attributes(self.graph,values=attr,name=name)
 
-    def add_trim_attr(self, name, values):
+    def add_trim_attr(self, name, values, default=0):
         """
-        Adds an attribute to the set of nodes in the CSN using the trim indices.
+        Adds an attribute to the set of nodes in the CSN.
+        Values should be an iterable of the size of csn.trim_indices
         """
-
         attr = {}
-        for i, idx in enumerate(self.trim_indices):
-            attr[idx] = values[i]
+        for i in range(self.nnodes):
+            if i in self.trim_indices:
+                trim_idx = self.trim_indices.index(i)
+                attr[i] = values[trim_idx]
+            else:
+                attr[i] = default
 
         nx.set_node_attributes(self.graph,values=attr,name=name)
-
-
+        
     def set_colors(self, rgb):
         """
         Adds colors to each node for gexf export of the graph.
@@ -205,20 +212,26 @@ class CSN(object):
         else:
             mask[[i for i in range(self.nnodes) if totcounts[i] == 0]] = False
 
+        itercount = 0
+        diff = []
         while (mask != oldmask).any():
 
             oldmask = mask.copy()
             self.trim_indices = [i for i in range(self.nnodes) if mask[i] == True]
             self.trim_graph = self.graph.subgraph(self.trim_indices)
 
+            print(f"Iteration {itercount}:",diff)
+            itercount += 1
+            
             if by_outflow:
-                downstream = nx.dfs_successors(self.trim_graph,msn).values()
-                dlist = list(itertools.chain(*downstream)) + [msn]
-                mask[[i for i in range(self.nnodes) if i not in dlist]] = False
+                downstream = [i for i in self.trim_indices if nx.has_path(self.trim_graph,msn,i)]
+                mask[[i for i in range(self.nnodes) if i not in downstream]] = False
 
             if by_inflow:
-                upstream = list(nx.dfs_predecessors(self.trim_graph,msn).keys()) + [msn]
+                upstream = [i for i in self.trim_indices if nx.has_path(self.trim_graph,i,msn)]
                 mask[[i for i in range(self.nnodes) if i not in upstream]] = False
+
+            diff = [i for i in range(self.nnodes) if mask[i] != oldmask[i]]
 
         # count all transitions to masked states and add these as self-transitions
         # rows = to, cols = from
@@ -254,6 +267,9 @@ class CSN(object):
             if i not in self.trim_indices:
                 is_trim[i] = 1
         self.add_attr('trim',is_trim)
+
+        if not well_conditioned(self.trim_transmat.toarray()):
+            print("Warning: trimmed transition matrix is not well-conditioned.")
                 
     def calc_eig_weights(self,label='eig_weights'):
         """
@@ -301,7 +317,8 @@ class CSN(object):
                 full_wts[ind] = wts[i]
 
         fw_float = [float(i) for i in full_wts]
-        self.add_attr(label, fw_float)
+        if label is not None:
+            self.add_attr(label, fw_float)
 
         return full_wts
 
@@ -334,21 +351,23 @@ class CSN(object):
         assert method in ['iter','linalg'], 'Error! method must be either iter or linalg'
 
         if self.trim_transmat is None:
+            assert well_conditioned(self.transmat.toarray()), "Error: cannot calculate committors from transition matrix. Try trimming first."
+
             # use full transition matrix
             if method == 'iter':
                 full_comm = committor(self.transmat,basins,tol=tol,maxstep=maxstep)
             elif method == 'linalg':
                 full_comm = committor_linalg(self.transmat,basins)
+                    
         else:
             # use trimmed transition matrix
             trim_basins = []
             for i,b in enumerate(basins):
                 trim_basins.append([])
-                for j,state in enumerate(b):
-                    try:
+                for state in b:
+                    if state in self.trim_indices:
                         trim_basins[i].append(self.trim_indices.index(state))
-                    except:
-                        pass
+
             if method == 'iter':
                 comm = committor(self.trim_transmat,trim_basins,tol=tol,maxstep=maxstep)
             elif method == 'linalg':
@@ -376,6 +395,80 @@ class CSN(object):
 
         return full_comm
 
+    def calc_mfpt(self,sinks,maxsteps=None,tol=1e-3,sources=None):
+        """
+        Calculates the mean first passage time (MFPT) and the first passage time distribution (FPTD)
+        from every state in the matrix to a set of "sinks".
+
+        sinks -- (list of int) A list of states that will be used as sinks
+
+        stepsize -- (int) The lagtime, in multiples of tau, that is used to compute the MFPT, which is 
+                          also the resolution of the FPTD.
+
+        maxsteps -- (int) The maximum number of steps used to compute the FPTD.
+
+        tol -- (float) The quitting criteria for FPTD calculation.  The calculation will stop if the 
+                       largest "un-sunk" probability is below tol.
+
+        sources -- (None or list of int) List of source states to average over.  If None, will return
+                   MFPT and FPTD of all states.
+        """
+
+        assert tol is not None or maxsteps is not None, "Error: either maxsteps or tol must be defined!"
+
+        if tol is None:
+            tol = 0.0
+        if maxsteps is None:
+            maxsteps = np.inf
+        
+        if self.trim_transmat is None:
+            assert well_conditioned(self.transmat.toarray()), "Error: cannot calculate mfpt from transition matrix. Try trimming first."
+
+            # use full transition matrix
+            full_fptd = fptd(self.transmat,sinks,maxsteps=maxsteps,tol=tol)
+            full_mfpt = np.zeros((self.transmat.shape[0]),dtype=float)
+            for i in range(full_fptd.shape[0]):
+                # loop over exponentially placed timepoints
+                # this entry is the flux between lag*(2**[i]) and lag*(2**[i+1])
+                # avg. of endpoints is (2**(i-1) + 2**(i))
+                full_mfpt += full_fptd[i,:]*(2**(i-1) + 2**(i)) # in units of lagtime
+
+        else:
+            # use trimmed transition matrix
+            trim_sinks = []
+            for state in sinks:
+                if state in self.trim_indices:
+                    trim_sinks.append(self.trim_indices.index(state))
+
+            trim_fptd = fptd(self.trim_transmat,trim_sinks,maxsteps=maxsteps,tol=tol)
+            trim_mfpt = np.zeros((trim_fptd.shape[1]),dtype=float)
+            for i in range(trim_fptd.shape[0]):
+                # loop over exponentially placed timepoints
+                # this entry is the flux between lag*(2**[i]) and lag*(2**[i+1])
+                trim_mfpt += trim_fptd[i,:]*(2**(i-1) + 2**(i)) # in units of lagtime
+
+            full_fptd = np.zeros((trim_fptd.shape[0],self.transmat.shape[0]),dtype=float)
+            full_mfpt = np.zeros((self.transmat.shape[0]),dtype=float)
+            for i,ind in enumerate(self.trim_indices):
+                full_fptd[:,ind] = trim_fptd[:,i]
+                full_mfpt[ind] = trim_mfpt[i]
+
+        if sources is not None:
+            wts = self.calc_mult_weights(label=None,tol=1e-6)
+            wt_sum = wts[sources].sum()
+
+            avg_mfpt = 0
+            avg_fptd = np.zeros((full_fptd.shape[0]))
+            for s in sources:
+                avg_mfpt += full_mfpt[s]*wts[s]
+                avg_fptd += full_fptd[:,s]*wts[s]
+
+            return np.array([avg_mfpt/wt_sum]), np.array([avg_fptd/wt_sum])
+        else:
+            return full_mfpt, full_fptd
+
+        
+
     def idxs_to_trim(self,idxs):
         """
         Converts a list of idxs to trim_idxs.
@@ -385,3 +478,64 @@ class CSN(object):
         """
 
         return [self.trim_indices.index(i) for i in idxs if i in self.trim_indices]
+
+    def calc_eigvectors(self, n_eig=3,
+                        include_wt_vec=False,
+                        save_to_graph=True,
+                        save_imag_to_graph=False,
+                        save_label='eig'):
+        """
+        Calculates committor probabilities between an arbitrary set of N basins.
+
+        n_eig    -- The number of eigenvectors to return
+
+        include_wt_vec -- Whether or not to include the eigenvector with 
+                          eigenvalue = 1.  Note that this is equal to the 
+                          steady state weights.
+
+        save_to_graph -- Whether or not to save the eigenvectors to the graph
+                         (real part).
+
+        save_imag_to_graph -- Whether or not to save the eigenvectors to the 
+                              graph (imaginary part).
+
+        save_label -- Labels given to each eigenvector when saving to the graph.
+                      Indices are appended and counting starts at zero (e.g. 
+                      eig0, eig1, ..).  If imaginary part is saved (eig0_imag, eig1_imag, ...)
+
+        Output:
+        eig_vecs -- A numpy array (N, n_eig) of eigenvector elements (real part only)
+
+        eig_vals -- A numpy array of the n_eig eigenvalues (real part only)
+        
+        eig_vecs_imag -- A numpy array (N, n_eig) of eigenvector elements (imaginary part only)
+        
+        eig_vals_imag - A numpy array of the n_eig eigenvalues (imaginary part only)
+
+        """
+
+        if self.trim_transmat is None:
+            # use full transition matrix
+            vec_real, val_real, vec_imag, val_imag = get_eigenvectors(self.transmat.toarray(), n_eig=n_eig, return_wt_vec=include_wt_vec)
+        else:
+            # use trimmed transition matrix
+            trim_vec_real, val_real, trim_vec_imag, val_imag = get_eigenvectors(self.trim_transmat.toarray(), n_eig=n_eig, return_wt_vec=include_wt_vec)
+
+            vec_real = np.zeros((self.transmat.shape[0],n_eig),dtype=float)
+            vec_imag = np.zeros((self.transmat.shape[0],n_eig),dtype=float)
+            for i,ind in enumerate(self.trim_indices):
+                vec_real[ind] = trim_vec_real[i]
+                vec_imag[ind] = trim_vec_imag[i]
+
+        # add eigenvectors as attributes
+        if save_to_graph:
+            for idx in range(n_eig):
+                label = f'{save_label}{idx}'
+                self.add_attr(label, vec_real[:,idx])
+
+        if save_imag_to_graph:
+            for idx in range(n_eig):
+                label = f'{save_label}{idx}_imag'
+                self.add_attr(label, vec_imag[:,idx])
+
+        return vec_real, val_real, vec_imag, val_imag
