@@ -28,13 +28,13 @@ class CSN(object):
             self.countmat = scipy.sparse.coo_matrix(counts)
         elif type(counts) is np.ndarray:
             self.countmat = scipy.sparse.coo_matrix(counts)
-        elif type(counts) is scipy.sparse.coo.coo_matrix:
-            self.countmat = counts
+        elif scipy.sparse.issparse(counts):
+            self.countmat = counts.tocoo()
         else:
             try:
                 self.countmat = counts.tocoo()
-            except:
-                raise TypeError("Count matrix is of unsupported type: ",type(counts))
+            except Exception:
+                raise TypeError("Count matrix is of unsupported type: " + str(type(counts)))
 
         if self.countmat.shape[0] != self.countmat.shape[1]:
             raise ValueError("Count matrix is not square: ",self.countmat.shape)
@@ -70,7 +70,7 @@ class CSN(object):
 
         """
         if cols == 'all':
-            cols = list(self.graph.node[0].keys())
+            cols = list(self.graph.nodes[0].keys())
         else:
             if 'label' not in cols:
                 cols = ['label'] + cols
@@ -80,7 +80,7 @@ class CSN(object):
         with open(node_name,mode='w') as f:
             f.write(" ".join(cols)+"\n")
             for i in range(self.nnodes):
-                data = [str(self.graph.node[i][c]) for c in cols]
+                data = [str(self.graph.nodes[i][c]) for c in cols]
                 f.write(' '.join(data)+"\n")
 
         # compute edge weights
@@ -138,9 +138,9 @@ class CSN(object):
                  rgb['0']['b'] = 0
         """
         for node in rgb:
-            if 'viz' not in self.graph.node[node]:
-                self.graph.node[node]['viz'] = {}
-            self.graph.node[node]['viz']['color'] = {'r': rgb[node]['r'], 'g': rgb[node]['g'], 'b': rgb[node]['b'], 'a': 0}
+            if 'viz' not in self.graph.nodes[node]:
+                self.graph.nodes[node]['viz'] = {}
+            self.graph.nodes[node]['viz']['color'] = {'r': rgb[node]['r'], 'g': rgb[node]['g'], 'b': rgb[node]['b'], 'a': 0}
 
     def set_positions(self, xy):
         """
@@ -152,9 +152,9 @@ class CSN(object):
                  xy[0]['y'] = 1.6
         """
         for node in xy:
-            if 'viz' not in self.graph.node[node]:
-                self.graph.node[node]['viz'] = {}
-            self.graph.node[node]['viz']['position'] = {'x': float(xy[node]['x']), 'y': float(xy[node]['y']), 'z': float(0)}
+            if 'viz' not in self.graph.nodes[node]:
+                self.graph.nodes[node]['viz'] = {}
+            self.graph.nodes[node]['viz']['position'] = {'x': float(xy[node]['x']), 'y': float(xy[node]['y']), 'z': float(0)}
 
 
     def colors_from_committors(self,comm):

@@ -77,8 +77,24 @@ def eig_weights(transmat):
     Output:     An array of weights of size N.
     """
 
-    vals, vecs = scipy.sparse.linalg.eigs(transmat,k=1)
-    return np.real(vecs[:,0])/np.real(vecs[:,0].sum())
+    n = transmat.shape[0]
+    arr = transmat.toarray() if scipy.sparse.issparse(transmat) else np.asarray(transmat)
+
+    if n <= 2:
+        # scipy.sparse.linalg.eigs requires k < N-1; use dense solver for small matrices
+        vals, vecs = scipy.linalg.eig(arr)
+        idx = np.argmin(np.abs(np.real(vals) - 1.0))
+        wt_vec = np.real(vecs[:, idx])
+    else:
+        # which='LR' selects the eigenvalue with the largest real part (= 1 for stochastic matrices),
+        # avoiding the sign ambiguity that arises with 'LM' on periodic chains where |-1| == |1|.
+        vals, vecs = scipy.sparse.linalg.eigs(arr, k=1, which='LR')
+        wt_vec = np.real(vecs[:, 0])
+
+    # The eigenvector sign is arbitrary; ensure it is all-positive before normalising.
+    if wt_vec.sum() < 0:
+        wt_vec = -wt_vec
+    return wt_vec / wt_vec.sum()
 
 def mult_weights(transmat,tol=1e-6):
     """
