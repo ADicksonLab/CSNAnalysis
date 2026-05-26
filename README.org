@@ -1,46 +1,102 @@
-* CSNAnalysis: Tools for creating, analyzing and visualizing Conformation Space Networks.
+* CSNAnalysis: Tools for creating, analyzing and visualizing Conformation Space Networks
 
-CSNAnalysis is a set of tools for network-based analysis of molecular dynamics trajectories.
-To use, initialize a `CSN` object using a matrix of transition counts.
-The "killer app" of CSNAnalysis is an easy interface between enhanced sampling algorithms 
-(e.g. WExplore), molecular clustering programs (e.g. MSMBuilder), graph analysis packages (e.g. networkX) 
-and graph visualization programs (e.g. Gephi).
+CSNAnalysis is a Python package for network-based analysis of molecular dynamics trajectories.
+Initialize a ~CSN~ object from a matrix of transition counts between molecular conformations to
+access a unified interface for computing network properties, analyzing kinetics, and exporting
+visualizations.
 
-CSNAnalysis is currently in beta.
+CSNAnalysis connects enhanced sampling algorithms (e.g. [[https://github.com/ADicksonLab/wepy][wepy]]), clustering programs,
+graph analysis (e.g. [[https://networkx.org][NetworkX]]), and
+graph visualization programs (e.g. [[https://gephi.org][Gephi]]).
 
 * Installation
 
-To install CSNAnalysis, you can get the latest:
+Install the latest release from PyPI:
+
+#+begin_src bash
+  pip install CSNAnalysis
+#+end_src
+
+Or install directly from GitHub:
 
 #+begin_src bash
   pip install git+https://github.com/ADicksonLab/CSNAnalysis
 #+end_src
 
-Or one of the releases:
+* Quick start
 
-#+begin_src bash
-  pip install git+https://github.com/ADicksonLab/CSNAnalysis@v0.3
+#+begin_src python
+  import scipy.sparse
+  from csnanalysis.csn import CSN
+
+  # Load a count matrix (numpy array, scipy sparse, or list of lists)
+  count_mat = scipy.sparse.load_npz('matrix.npz')
+
+  # Build the CSN and trim poorly-sampled states
+  csn = CSN(count_mat, symmetrize=True)
+  csn.trim(by_inflow=True, by_outflow=True, min_count=20)
+
+  # Compute steady-state weights
+  weights = csn.calc_eig_weights()
+
+  # Compute committor probabilities between two basins
+  committors = csn.calc_committors([basin_A, basin_B])
+
+  # Compute mean first passage times to a set of sink states
+  mfpt, fptd = csn.calc_mfpt(sinks=basin_A)
+
+  # Export to Gephi for visualization
+  import networkx as nx
+  nx.readwrite.gexf.write_gexf(csn.graph.to_undirected(), 'network.gexf')
 #+end_src
 
 * Dependencies
-- numpy
-- scipy
-- networkx
+
+| Package    | Minimum version |
+|------------+-----------------|
+| numpy      | 1.20            |
+| scipy      | 1.7             |
+| networkx   | 3.0             |
+
+Python 3.9 or later is required.
 
 * Features
-CSNAnalysis has the following capabilities:
 
-- constructing transition probability matrices
-- trimming CSNs using a variety of criteria
-- computing committor probabilities with an arbitrary number of basins
-- export gexf files with custom node colorings
+- *Network construction* — build a ~CSN~ from numpy arrays, scipy sparse matrices, or lists of lists,
+  with optional symmetrization of the count matrix
 
-* Tutorial
-See the Jupyter Notebook in examples/examples.ipynb
+- *Trimming* — remove poorly-connected or poorly-sampled states via inflow/outflow connectivity
+  to the most-sampled node, with optional minimum count threshold
 
-* Misc
-** Versioning
+- *Steady-state weights* — compute equilibrium populations via the leading eigenvector or
+  iterative matrix multiplication
 
-See [[http://semver.org/]] for version number meanings.
+- *Committor probabilities* — compute forward-committor probabilities to an arbitrary number
+  of basins using iterative matrix multiplication or direct linear algebra (2-basin only)
 
-Version 1.0.0 will be released whenever the abstract layer API is stable. Subsequent 1.X.y releases will be made as applied and porcelain layer features are added.
+- *Mean first passage times* — compute MFPTs and first passage time distributions (FPTDs) from
+  all states to a set of sink states, with support for source-averaged MFPTs
+
+- *Hub scores* — quantify the degree to which a set of intermediate states mediates transitions
+  between two communities (see [[https://pubs.acs.org/doi/full/10.1021/ct300537s][Dickson & Brooks, JCTC 2012]])
+
+- *Eigenvectors* — extract the slowest dynamical modes of the transition matrix
+
+- *Visualization* — color nodes by committor probability and export GEXF files for Gephi
+
+* Tutorials
+
+Three Jupyter notebooks are provided in the ~examples/~ directory:
+
+1. *[[file:examples/01_getting_started.ipynb][01_getting_started.ipynb]]* — Constructing a CSN from a count matrix, trimming,
+   and computing steady-state weights
+
+2. *[[file:examples/02_committors_and_visualization.ipynb][02_committors_and_visualization.ipynb]]* — Computing 2- and N-basin committor probabilities,
+   extracting slow eigenvectors, coloring nodes by committor, and exporting to Gephi
+
+3. *[[file:examples/03_mfpt_and_hubscores.ipynb][03_mfpt_and_hubscores.ipynb]]* — Mean first passage times, first passage time distributions,
+   and hub scores for identifying kinetic intermediates
+
+* Contributing
+
+Bug reports and feature requests are welcome on the [[https://github.com/ADicksonLab/CSNAnalysis/issues][GitHub issue tracker]].
